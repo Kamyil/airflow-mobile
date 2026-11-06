@@ -10,13 +10,27 @@ export interface OutboxItem {
 }
 
 const OUTBOX_KEY = 'airflow-mobile-outbox';
+const OFFLINE_KEY = 'airflow-mobile-offline';
 
 class Connectivity {
 	browserOnline = $state(true);
-	simulatedOffline = $state(false);
+	#simulated = $state(false);
 	outbox: OutboxItem[] = $state([]);
 	syncing = $state(false);
 	#seq = 0;
+
+	/** Makieta: symulacja braku sieci (przeżywa odświeżenie strony) */
+	get simulatedOffline() {
+		return this.#simulated;
+	}
+	set simulatedOffline(v: boolean) {
+		this.#simulated = v;
+		try {
+			localStorage.setItem(OFFLINE_KEY, v ? '1' : '');
+		} catch {
+			// brak localStorage
+		}
+	}
 
 	get online() {
 		return this.browserOnline && !this.simulatedOffline;
@@ -25,6 +39,7 @@ class Connectivity {
 	init() {
 		this.browserOnline = navigator.onLine;
 		try {
+			this.#simulated = localStorage.getItem(OFFLINE_KEY) === '1';
 			this.outbox = JSON.parse(localStorage.getItem(OUTBOX_KEY) ?? '[]');
 			this.#seq = Math.max(0, ...this.outbox.map((o) => o.id));
 		} catch {

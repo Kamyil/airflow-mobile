@@ -83,3 +83,12 @@ export function finishInventory(id: string, approval?: { pin: string; note: stri
 		return { diffs: dto.diffs.length };
 	});
 }
+
+/** Makieta: produkty, których nie ma na lokalizacji – do symulacji "znalazłem dodatkowy towar" */
+export function sampleExtraProducts(inventoryId: string, code: string): Promise<{ ean: string; sku: string }[]> {
+	return query((db) => {
+		let loc = find(db.inventories, inventoryId).locations.find((l) => l.code === code);
+		let present = new Set(loc?.items.map((i) => i.productId));
+		return db.products.filter((p) => !present.has(p.id) && p.tracking !== 'SERIAL').slice(3, 5).map((p) => ({ ean: p.ean, sku: p.sku }));
+	});
+}

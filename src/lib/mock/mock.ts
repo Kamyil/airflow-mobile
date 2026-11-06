@@ -173,10 +173,10 @@ export function createSeed(): Db {
 		stock: buildStock(),
 
 		emailGroups: [
-			{ id: 'eg1', name: 'Spedycja – Raben Poznań', emails: ['awizacje.poznan@raben.example', 'dyspozytor@raben.example'] },
-			{ id: 'eg2', name: 'Spedycja – DPD', emails: ['odbiory@dpd.example'] },
-			{ id: 'eg3', name: 'Biuro obsługi klienta', emails: ['bok@mws.example'] },
-			{ id: 'eg4', name: 'Kierownik zmiany', emails: ['kierownik.zmiany@mws.example'] }
+			{ id: 'eg1', name: 'Spedycja – Raben Poznań', emails: ['awizacje.poznan@raben.example', 'dyspozytor@raben.example'], forwarderId: 'raben', always: false },
+			{ id: 'eg2', name: 'Spedycja – DPD', emails: ['odbiory@dpd.example'], forwarderId: 'dpd', always: false },
+			{ id: 'eg3', name: 'Biuro obsługi klienta', emails: ['bok@mws.example'], forwarderId: null, always: true },
+			{ id: 'eg4', name: 'Kierownik zmiany', emails: ['kierownik.zmiany@mws.example'], forwarderId: null, always: false }
 		],
 
 		// Spedytor wynika z rodzaju nośnika: palety -> Raben, paczki -> DPD
@@ -486,13 +486,13 @@ export function createSeed(): Db {
 		],
 
 		salesOrders: [
-			{ id: 'so-0412', number: 'ZAM/2026/09/0412', customerOrderNumber: 'BM-5521', customerId: 'c1', shipDate: day(1) },
-			{ id: 'so-0415', number: 'ZAM/2026/09/0415', customerOrderNumber: 'TI/0934/26', customerId: 'c2', shipDate: day(1) },
-			{ id: 'so-0409', number: 'ZAM/2026/09/0409', customerOrderNumber: 'DX-77120', customerId: 'c3', shipDate: day(0) },
-			{ id: 'so-0403', number: 'ZAM/2026/09/0403', customerOrderNumber: 'ARK-311', customerId: 'c4', shipDate: day(0) },
-			{ id: 'so-0398', number: 'ZAM/2026/09/0398', customerOrderNumber: 'IB-2026-118', customerId: 'c5', shipDate: day(0) },
-			{ id: 'so-0395', number: 'ZAM/2026/09/0395', customerOrderNumber: 'TI/0911/26', customerId: 'c2', shipDate: day(0) },
-			{ id: 'so-0390', number: 'ZAM/2026/09/0390', customerOrderNumber: 'DX-77004', customerId: 'c3', shipDate: day(-1) }
+			{ id: 'so-0412', number: 'ZAM/2026/11/0412', customerOrderNumber: 'BM-5521', customerId: 'c1', shipDate: day(1) },
+			{ id: 'so-0415', number: 'ZAM/2026/11/0415', customerOrderNumber: 'TI/0934/26', customerId: 'c2', shipDate: day(1) },
+			{ id: 'so-0409', number: 'ZAM/2026/11/0409', customerOrderNumber: 'DX-77120', customerId: 'c3', shipDate: day(0) },
+			{ id: 'so-0403', number: 'ZAM/2026/11/0403', customerOrderNumber: 'ARK-311', customerId: 'c4', shipDate: day(0) },
+			{ id: 'so-0398', number: 'ZAM/2026/11/0398', customerOrderNumber: 'IB-2026-118', customerId: 'c5', shipDate: day(0) },
+			{ id: 'so-0395', number: 'ZAM/2026/11/0395', customerOrderNumber: 'TI/0911/26', customerId: 'c2', shipDate: day(0) },
+			{ id: 'so-0390', number: 'ZAM/2026/11/0390', customerOrderNumber: 'DX-77004', customerId: 'c3', shipDate: day(-1) }
 		],
 
 		pickingOrders: [

@@ -164,6 +164,10 @@ export interface EmailGroup {
 	id: string;
 	name: string;
 	emails: string[];
+	/** Grupa spedytora – zaznaczana domyślnie przy jego wydaniach */
+	forwarderId: string | null;
+	/** Zawsze zaznaczona domyślnie */
+	always: boolean;
 }
 
 export interface Db {

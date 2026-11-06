@@ -121,7 +121,7 @@ export function finalizeDispatch(forwarderId: string, input: FinalizeInput): Pro
 			dock: group.dock,
 			driver: { name: input.driverName.trim(), plate: input.plate.trim().toUpperCase(), signature: input.signature },
 			photos: input.photos.map((src) => ({ id: `ph-${db.counters.photo++}`, src, takenAt: closedAt })),
-			emails: input.emailGroupIds.length ? [{ groupIds: input.emailGroupIds, sentAt: closedAt }] : [],
+			emails: input.emailGroupIds.length ? [{ groupIds: [...input.emailGroupIds], sentAt: closedAt }] : [],
 			withdrawn: [],
 			operator: who()
 		};
@@ -162,7 +162,7 @@ export function sendShipmentEmail(id: string, groupIds: string[]): Promise<void>
 	requireOnline('wysyłka e-maila');
 	return mutate('Wysyłka podsumowania e-mail', (db) => {
 		if (!groupIds.length) throw new ApiError('VALIDATION', 'Wybierz co najmniej jedną grupę odbiorców');
-		find(db.shipments, id).emails.push({ groupIds, sentAt: now() });
+		find(db.shipments, id).emails.push({ groupIds: [...groupIds], sentAt: now() });
 	});
 }
 

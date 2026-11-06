@@ -1,7 +1,9 @@
 {
-	"name": "MWS Magazyn – kompletacja i wysyłka",
-	"short_name": "MWS Magazyn",
-	"start_url": "/kompletacja",
+	"name": "Airflow Magazyn – aplikacja magazyniera",
+	"short_name": "Airflow MWS",
+	"description": "Przyjęcia, alokacja, przesunięcia, kompletacja i wydania na telefonie magazyniera",
+	"start_url": "/",
+	"scope": "/",
 	"display": "standalone",
 	"orientation": "portrait",
 	"background_color": "#f2f2ee",
