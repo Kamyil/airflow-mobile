@@ -1,0 +1,94 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/jetbrains-mono';
+
+@theme {
+	--font-sans: 'Manrope Variable', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+	--color-bg: #f2f2ee;
+	--color-surface: #ffffff;
+	--color-ink: #14181c;
+	--color-ink-2: #3a4148;
+	--color-muted: #6b727a;
+	--color-line: #e2e2dc;
+	--color-line-strong: #cfcfc7;
+
+	/* kolor "zadania" – wysoka widoczność, jak oznakowanie BHP */
+	--color-task: #f5b400;
+	--color-task-ink: #1a1400;
+	--color-task-soft: #fff4d1;
+
+	--color-ok: #17804a;
+	--color-ok-soft: #e3f4ea;
+	--color-warn: #b86400;
+	--color-warn-soft: #fff0dc;
+	--color-bad: #c9302c;
+	--color-bad-soft: #fde7e5;
+	--color-info: #2458d6;
+	--color-info-soft: #e5edfd;
+}
+
+@layer base {
+	html {
+		-webkit-tap-highlight-color: transparent;
+		background: var(--color-bg);
+	}
+	body {
+		@apply bg-bg font-sans text-ink antialiased;
+		overscroll-behavior-y: none;
+	}
+	button {
+		cursor: pointer;
+	}
+	button:disabled {
+		cursor: not-allowed;
+	}
+	input[type='number']::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+	}
+}
+
+@utility pb-safe {
+	padding-bottom: env(safe-area-inset-bottom);
+}
+@utility pt-safe {
+	padding-top: env(safe-area-inset-top);
+}
+
+@keyframes sheet-up {
+	from {
+		transform: translateY(100%);
+	}
+}
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes toast-in {
+	from {
+		transform: translateY(-12px);
+		opacity: 0;
+	}
+}
+@keyframes progress-slide {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(250%);
+	}
+}
+.sheet[data-state='open'] {
+	animation: sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.overlay[data-state='open'] {
+	animation: fade-in 0.2s ease-out;
+}
+.toast-in {
+	animation: toast-in 0.2s ease-out;
+}
+.progress-slide {
+	animation: progress-slide 1s ease-in-out infinite;
+}

@@ -1,0 +1,10 @@
+// See https://svelte.dev/docs/kit/types#app.d.ts
+declare global {
+	namespace App {
+		interface Locals {
+			user: { login: string; name: string } | null;
+		}
+	}
+}
+
+export {};
