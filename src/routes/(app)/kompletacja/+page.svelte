@@ -5,7 +5,6 @@
 	import { toast } from '$lib/toast.svelte';
 	import { plural } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import AppMenu from '$lib/components/AppMenu.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import CarrierCode from '$lib/components/CarrierCode.svelte';
@@ -91,9 +90,9 @@
 	async function release(po: PickingOrderSummaryDTO) {
 		busyId = po.id;
 		try {
-			let { salesOrderNumber } = await releasePickingOrder(po.id);
-			toast.ok(`Wydano ${po.number}`, 'Wydrukuj etykiety w przygotowaniu wysyłki.');
-			await goto(`/wysylka/przygotowanie?zamowienie=${encodeURIComponent(salesOrderNumber)}`);
+			await releasePickingOrder(po.id);
+			toast.ok(`Wydano ${po.number}`, 'Wydrukuj etykiety wysyłkowe w Wydaniach.');
+			await goto(po.forwarder ? `/wydania/${po.forwarder.id}` : '/wydania/do-wydania');
 		} catch (e) {
 			if (e instanceof ApiError && e.code === 'RELEASE_BLOCKED') {
 				blocked = { po, blockers: e.details };
@@ -125,9 +124,7 @@
 	}
 </script>
 
-<PageHeader title="Kompletacja nośników" subtitle="Zatwierdzone zlecenia kompletacyjne">
-	{#snippet actions()}<AppMenu />{/snippet}
-</PageHeader>
+<PageHeader title="Kompletacja nośników" subtitle="Zatwierdzone zlecenia kompletacyjne" back="/" />
 
 <div class="px-3 pt-3">
 	<label class="flex h-11 items-center gap-2 rounded-xl border border-line bg-surface px-3 focus-within:border-ink">

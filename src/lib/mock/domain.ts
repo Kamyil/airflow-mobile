@@ -1,5 +1,6 @@
 import type {
 	Carrier,
+	DispatchGroupDTO,
 	CarrierDTO,
 	CarrierKind,
 	Db,
@@ -102,7 +103,8 @@ export function carrierDTO(db: Db, c: Carrier): CarrierDTO {
 		contentLabelOutdated: c.contentLabel !== null && c.contentLabel.signature !== contentSignature(c),
 		contentLabelMissing: c.items.length > 0 && c.contentLabel === null,
 		stagedAt: c.stagedAt,
-		dock: c.dock
+		dock: c.dock,
+		loadedAt: c.loadedAt
 	};
 }
 
@@ -229,22 +231,62 @@ export function readiness(db: Db, so: SalesOrder): OrderReadiness {
 		carriersStaged: staged,
 		weightKg: round(carriers.reduce((sum, c) => sum + c.weightKg, 0)),
 		ready: waitingFor.length === 0 && carriers.length > 0 && staged === carriers.length,
-		waitingFor
+		waitingFor,
+		carriersLoaded: carriers.filter((c) => c.loadedAt).length
 	};
 }
 
 export function shipmentDTO(db: Db, s: Shipment): ShipmentDTO {
+	let withdrawn = new Set(s.withdrawn.map((w) => w.salesOrderId));
 	let carriers = s.carrierIds.map((id) => carrierDTO(db, find(db.carriers, id)));
+	let orders = s.salesOrderIds.map((id) => {
+		let so = find(db.salesOrders, id);
+		let poIds = new Set(db.pickingOrders.filter((p) => p.salesOrderId === id).map((p) => p.id));
+		return {
+			id,
+			number: so.number,
+			customer: find(db.customers, so.customerId).name,
+			withdrawn: withdrawn.has(id),
+			carriers: s.carrierIds.map((cid) => find(db.carriers, cid)).filter((c) => poIds.has(c.pickingOrderId)).map((c) => carrierDTO(db, c))
+		};
+	});
+	let active = orders.filter((o) => !o.withdrawn).flatMap((o) => o.carriers);
 	return {
 		...s,
 		forwarder: find(db.forwarders, s.forwarderId),
-		orders: s.salesOrderIds.map((id) => {
-			let so = find(db.salesOrders, id);
-			return { number: so.number, customer: find(db.customers, so.customerId).name };
-		}),
-		carriers: carriers.length,
-		weightKg: round(carriers.reduce((sum, c) => sum + c.weightKg, 0))
+		orders,
+		emailLog: s.emails.map((e) => ({ sentAt: e.sentAt, groups: e.groupIds.map((g) => find(db.emailGroups, g).name) })),
+		carriers: active.length,
+		weightKg: round(active.reduce((sum, c) => sum + c.weightKg, 0))
 	};
+}
+
+/** Wydania: zamówienia wydane z kompletacji, a jeszcze niewysłane – pogrupowane po spedytorze */
+export function dispatchGroups(db: Db): DispatchGroupDTO[] {
+	let soIds = new Set(db.pickingOrders.filter((po) => po.releasedAt && !po.shippedAt).map((po) => po.salesOrderId));
+	let orders = db.salesOrders
+		.filter((so) => soIds.has(so.id))
+		.map((so) => readiness(db, so))
+		.sort((a, b) => a.salesOrder.shipDate.localeCompare(b.salesOrder.shipDate) || a.salesOrder.number.localeCompare(b.salesOrder.number));
+
+	return db.forwarders
+		.map((forwarder) => {
+			let own = orders.filter((o) => o.forwarder.id === forwarder.id);
+			let ready = own.filter((o) => o.ready);
+			let loaded = ready.filter((o) => o.carriersLoaded === o.carriersTotal);
+			return {
+				forwarder,
+				dock: forwarder.defaultDock,
+				orders: own,
+				readyOrders: ready.length,
+				carriersReady: ready.reduce((n, o) => n + o.carriersTotal, 0),
+				carriersLoaded: own.reduce((n, o) => n + o.carriersLoaded, 0),
+				loadedOrders: loaded.length,
+				partialOrders: own.filter((o) => o.carriersLoaded > 0 && o.carriersLoaded < o.carriersTotal).map((o) => o.salesOrder.number),
+				weightLoadedKg: round(loaded.reduce((n, o) => n + o.weightKg, 0))
+			};
+		})
+		.filter((g) => g.orders.length > 0);
 }
 
 // --- kody i etykiety -----------------------------------------------------------

@@ -1,53 +1,19 @@
-import { commit, getDb, reset } from '$lib/mock/db';
+import { getDb } from '$lib/mock/db';
 import {
 	carrierSpec,
 	carriersOfSalesOrder,
 	contentSignature,
 	detailDTO,
 	find,
-	forwarderOf,
 	labelDTO,
 	nextCarrierCode,
 	packedQty,
-	readiness,
-	shipmentDTO,
 	summaryDTO
 } from '$lib/mock/domain';
-import type { CarrierKind, CustomDimensions, LabelDTO, OrderReadiness, PickingOrderDetailDTO, PickingOrderSummaryDTO, ShipmentDTO } from '$lib/types';
+import type { CarrierKind, CustomDimensions, LabelDTO, PickingOrderDetailDTO, PickingOrderSummaryDTO } from '$lib/types';
+import { ApiError, mutate, now, query } from './core';
 
-/**
- * Warstwa API makiety. Zachowuje się jak klient backendu: asynchronicznie, z opóźnieniem,
- * zwraca kopie danych i rzuca `ApiError` przy błędach walidacji.
- * Podpięcie prawdziwego backendu = podmiana implementacji tych funkcji.
- */
-
-export type ApiErrorCode = 'VALIDATION' | 'LABEL_REQUIRED' | 'RELEASE_BLOCKED' | 'NOT_FOUND';
-
-export class ApiError extends Error {
-	constructor(
-		public code: ApiErrorCode,
-		message: string,
-		public details: string[] = []
-	) {
-		super(message);
-	}
-}
-
-const latency = () => new Promise((r) => setTimeout(r, 120 + Math.random() * 180));
-const now = () => new Date().toISOString();
-const clone = <T>(v: T): T => structuredClone(v);
-
-async function query<T>(fn: () => T): Promise<T> {
-	await latency();
-	return clone(fn());
-}
-
-async function mutate<T>(fn: () => T): Promise<T> {
-	await latency();
-	let result = fn();
-	commit();
-	return clone(result);
-}
+/** Kompletacja (z makiety warehouse-app) – logika bez zmian, tylko wpięta w nową apkę. */
 
 function editablePickingOrder(pickingOrderId: string) {
 	let db = getDb();
@@ -57,19 +23,6 @@ function editablePickingOrder(pickingOrderId: string) {
 }
 
 // --- odczyt -------------------------------------------------------------------
-
-export function getContext() {
-	return query(() => {
-		let db = getDb();
-		return {
-			operator: db.operator,
-			counts: {
-				picking: db.pickingOrders.filter((po) => !po.releasedAt).length,
-				dispatch: new Set(db.pickingOrders.filter((po) => po.releasedAt && !po.shippedAt).map((po) => po.salesOrderId)).size
-			}
-		};
-	});
-}
 
 /** Zlecenia do kompletacji – wydane przechodzą do widoku Wysyłka */
 export function listPickingOrders(): Promise<PickingOrderSummaryDTO[]> {
@@ -91,26 +44,6 @@ export function getPickingOrder(id: string): Promise<PickingOrderDetailDTO> {
 	});
 }
 
-/** Zamówienia, które mają co najmniej jedną wydaną (a niewysłaną) kompletację */
-export function listDispatchOrders(filter: { salesOrderNumber?: string | null } = {}): Promise<OrderReadiness[]> {
-	return query(() => {
-		let db = getDb();
-		let soIds = new Set(db.pickingOrders.filter((po) => po.releasedAt && !po.shippedAt).map((po) => po.salesOrderId));
-		return db.salesOrders
-			.filter((so) => soIds.has(so.id))
-			.filter((so) => !filter.salesOrderNumber || so.number === filter.salesOrderNumber)
-			.map((so) => readiness(db, so))
-			.sort((a, b) => a.salesOrder.shipDate.localeCompare(b.salesOrder.shipDate) || a.salesOrder.number.localeCompare(b.salesOrder.number));
-	});
-}
-
-export function listShipments(): Promise<ShipmentDTO[]> {
-	return query(() => {
-		let db = getDb();
-		return db.shipments.map((s) => shipmentDTO(db, s)).sort((a, b) => b.closedAt.localeCompare(a.closedAt));
-	});
-}
-
 // --- etykiety -----------------------------------------------------------------
 
 /**
@@ -118,7 +51,7 @@ export function listShipments(): Promise<ShipmentDTO[]> {
  * `withContent` dokłada listę spakowanych produktów.
  */
 export function printLabels(carrierIds: string[], opts: { withContent: boolean }): Promise<LabelDTO[]> {
-	return mutate(() => {
+	return mutate('Druk etykiet nośników', () => {
 		let db = getDb();
 		return carrierIds.map((id) => {
 			let c = find(db.carriers, id);
@@ -168,7 +101,7 @@ function assertKind(salesOrderId: string, spec: CarrierSpecInput, ignoreCarrierI
 }
 
 export function createCarrier(pickingOrderId: string, spec: CarrierSpecInput): Promise<{ carrierId: string; code: string }> {
-	return mutate(() => {
+	return mutate('Dodanie nośnika', () => {
 		let db = getDb();
 		let po = editablePickingOrder(pickingOrderId);
 		validateSpec(spec);
@@ -189,7 +122,8 @@ export function createCarrier(pickingOrderId: string, spec: CarrierSpecInput): P
 			label: { printedAt: now(), printCount: 1 },
 			contentLabel: null,
 			stagedAt: null,
-			dock: null
+			dock: null,
+			loadedAt: null
 		};
 		db.carriers.push(carrier);
 		po.startedAt ??= now();
@@ -204,7 +138,7 @@ export interface CarrierUpdateInput extends CarrierSpecInput {
 
 /** Zmiana typu nośnika i wagi. Zawartości nie da się tu edytować – powstaje tylko przez skanowanie przy pakowaniu. */
 export function updateCarrier(carrierId: string, input: CarrierUpdateInput): Promise<void> {
-	return mutate(() => {
+	return mutate('Edycja nośnika', () => {
 		let db = getDb();
 		let carrier = find(db.carriers, carrierId);
 		let po = editablePickingOrder(carrier.pickingOrderId);
@@ -220,7 +154,7 @@ export function updateCarrier(carrierId: string, input: CarrierUpdateInput): Pro
 
 /** Usuwa nośnik; spakowane na nim produkty wracają do kolejki. Numeracja nośników w zamówieniu jest przeliczana. */
 export function deleteCarrier(carrierId: string): Promise<void> {
-	return mutate(() => {
+	return mutate('Usunięcie nośnika', () => {
 		let db = getDb();
 		let carrier = find(db.carriers, carrierId);
 		let po = editablePickingOrder(carrier.pickingOrderId);
@@ -234,7 +168,7 @@ export function deleteCarrier(carrierId: string): Promise<void> {
 
 /** Pakowanie po zeskanowaniu: półka -> towar -> ilość -> nośnik (po kodzie nośnika) */
 export function packLine(input: { pickingOrderId: string; lineId: string; carrierCode: string; qty: number }): Promise<{ carrierCode: string }> {
-	return mutate(() => {
+	return mutate('Spakowanie pozycji', () => {
 		let db = getDb();
 		let po = editablePickingOrder(input.pickingOrderId);
 		let line = po.lines.find((l) => l.id === input.lineId);
@@ -261,7 +195,7 @@ export function packLine(input: { pickingOrderId: string; lineId: string; carrie
 
 /** "Pomiń" – pozycja trafia na koniec kolejki */
 export function deferLine(pickingOrderId: string, lineId: string): Promise<void> {
-	return mutate(() => {
+	return mutate('Pominięcie pozycji', () => {
 		let po = editablePickingOrder(pickingOrderId);
 		po.deferredLineIds = [...po.deferredLineIds.filter((id) => id !== lineId), lineId];
 		po.startedAt ??= now();
@@ -269,7 +203,7 @@ export function deferLine(pickingOrderId: string, lineId: string): Promise<void>
 }
 
 export function confirmPickingOrder(pickingOrderId: string): Promise<void> {
-	return mutate(() => {
+	return mutate('Potwierdzenie kompletacji', () => {
 		let po = editablePickingOrder(pickingOrderId);
 		po.startedAt ??= now();
 		po.confirmedAt = now();
@@ -277,7 +211,7 @@ export function confirmPickingOrder(pickingOrderId: string): Promise<void> {
 }
 
 export function releasePickingOrder(pickingOrderId: string): Promise<{ salesOrderNumber: string }> {
-	return mutate(() => {
+	return mutate('Wydanie kompletacji', () => {
 		let db = getDb();
 		let po = editablePickingOrder(pickingOrderId);
 		let blockers = summaryDTO(db, po).releaseBlockers;
@@ -287,82 +221,3 @@ export function releasePickingOrder(pickingOrderId: string): Promise<{ salesOrde
 		return { salesOrderNumber: find(db.salesOrders, po.salesOrderId).number };
 	});
 }
-
-export function revertRelease(pickingOrderId: string): Promise<void> {
-	return mutate(() => {
-		let db = getDb();
-		let po = find(db.pickingOrders, pickingOrderId);
-		if (po.shippedAt) throw new ApiError('VALIDATION', 'Zlecenie zostało już wysłane');
-		po.releasedAt = null;
-		for (let c of db.carriers.filter((c) => c.pickingOrderId === po.id)) {
-			c.stagedAt = null;
-			c.dock = null;
-		}
-	});
-}
-
-// --- przygotowanie i zamknięcie wysyłki ---------------------------------------
-
-/**
- * Przygotowanie do wysyłki: wydruk etykiet (z zawartością) wydanych nośników.
- * Wydrukowany nośnik jest przygotowany – trafia na miejsce odbioru swojego spedytora.
- */
-export function printShippingLabels(carrierIds: string[]): Promise<LabelDTO[]> {
-	return mutate(() => {
-		let db = getDb();
-		return carrierIds.map((id) => {
-			let c = find(db.carriers, id);
-			let po = find(db.pickingOrders, c.pickingOrderId);
-			if (!po.releasedAt) throw new ApiError('VALIDATION', `${po.number} nie zostało wydane`);
-
-			c.label = c.label ? { printedAt: now(), printCount: c.label.printCount + 1 } : { printedAt: now(), printCount: 1 };
-			c.contentLabel = { printedAt: now(), signature: contentSignature(c) };
-			c.stagedAt ??= now();
-			c.dock ??= forwarderOf(db, po.salesOrderId)!.defaultDock;
-			return labelDTO(db, c, c.items.length > 0);
-		});
-	});
-}
-
-/**
- * Zamknięcie dnia: wszystkie gotowe zamówienia (wydane, z wydrukowanymi etykietami)
- * są wysyłane – powstaje jedna wysyłka na spedytora. Niegotowe czekają na kolejny dzień.
- */
-export function closeDay(): Promise<ShipmentDTO[]> {
-	return mutate(() => {
-		let db = getDb();
-		let soIds = new Set(db.pickingOrders.filter((po) => po.releasedAt && !po.shippedAt).map((po) => po.salesOrderId));
-		let ready = db.salesOrders.filter((so) => soIds.has(so.id)).map((so) => readiness(db, so)).filter((o) => o.ready);
-		if (!ready.length) throw new ApiError('VALIDATION', 'Brak gotowych zamówień do zamknięcia');
-
-		let byForwarder = new Map<string, typeof ready>();
-		for (let o of ready) byForwarder.set(o.forwarder.id, [...(byForwarder.get(o.forwarder.id) ?? []), o]);
-
-		return [...byForwarder.entries()].map(([forwarderId, orders]) => {
-			let seq = db.counters.shipment++;
-			let shipment = {
-				id: `sh-${seq}`,
-				number: `WYS/2026/${String(seq).padStart(4, '0')}`,
-				forwarderId,
-				salesOrderIds: orders.map((o) => o.salesOrder.id),
-				carrierIds: orders.flatMap((o) => o.pickingOrders.flatMap((p) => p.carriers.map((c) => c.id))),
-				waybillNo: `${forwarderId.slice(0, 3).toUpperCase()}-${Math.floor(7_000_000_000 + Math.random() * 999_999_999)}`,
-				closedAt: now()
-			};
-			db.shipments.push(shipment);
-			for (let po of db.pickingOrders.filter((p) => shipment.salesOrderIds.includes(p.salesOrderId) && p.releasedAt)) {
-				po.shippedAt = shipment.closedAt;
-				po.shipmentId = shipment.id;
-			}
-			return shipmentDTO(db, shipment);
-		});
-	});
-}
-
-// --- narzędzia makiety --------------------------------------------------------
-
-export async function resetMockData(): Promise<void> {
-	await latency();
-	reset();
-}
-

@@ -1,4 +1,4 @@
-import { ApiError } from '$lib/api';
+import { ApiError } from '$lib/api/core';
 
 export type ToastTone = 'ok' | 'bad' | 'info' | 'warn';
 

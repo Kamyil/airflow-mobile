@@ -9,13 +9,13 @@
 	let busy = $state(false);
 </script>
 
-<svelte:head><title>Logowanie · MWS Magazyn</title></svelte:head>
+<svelte:head><title>Logowanie · Airflow Magazyn</title></svelte:head>
 
 <main class="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-ink text-white">
 	<div class="pt-safe flex flex-1 flex-col justify-end px-6 pb-8">
 		<img src="/icon.svg" alt="" class="size-16 rounded-2xl" />
-		<h1 class="mt-5 text-3xl leading-tight font-extrabold">MWS Magazyn</h1>
-		<p class="mt-1 text-white/65">Kompletacja nośników i wysyłka</p>
+		<h1 class="mt-5 text-3xl leading-tight font-extrabold">Airflow Magazyn</h1>
+		<p class="mt-1 text-white/65">Przyjęcia · alokacja · przesunięcia · kompletacja · wydania</p>
 	</div>
 
 	<form
@@ -29,7 +29,8 @@
 			};
 		}}
 	>
-		<h2 class="text-xl font-extrabold">Zaloguj się</h2>
+		<h2 class="text-xl font-extrabold">Zaloguj urządzenie</h2>
+		<p class="mt-1 text-sm text-muted">Raz na urządzeniu – potem magazynierzy logują się PIN-em.</p>
 		<label class="mt-5 block text-sm font-semibold">
 			Login
 			<span class="mt-1 flex h-13 items-center gap-2 rounded-xl border-2 border-line-strong px-3 focus-within:border-ink">
@@ -47,6 +48,8 @@
 		{#if form?.error}
 			<p class="mt-3 flex items-center gap-2 rounded-xl bg-bad-soft p-3 text-sm font-semibold text-bad"><TriangleAlert class="size-4 shrink-0" />{form.error}</p>
 		{/if}
-		<Button type="submit" variant="primary" size="lg" class="mt-5 mb-6 w-full" loading={busy}>Zaloguj się</Button>
+		<Button type="submit" variant="primary" size="lg" class="mt-5 w-full" loading={busy}>Zaloguj się</Button>
+		<p class="mt-3 text-center text-xs text-muted">Makieta: <b class="font-mono">magazyn</b> / <b class="font-mono">mws2026</b></p>
+		<a href="/install" class="mt-2 mb-6 block text-center text-sm font-bold text-info underline underline-offset-2">Jak zainstalować aplikację na telefonie?</a>
 	</form>
 </main>

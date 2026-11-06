@@ -1,11 +1,12 @@
-import { seed } from '$lib/data';
+import { createSeed, day } from '$lib/mock/mock';
 import type { Db } from '$lib/types';
 
 /**
- * "Baza danych" makiety: kopia `seed` trzymana w pamięci i utrwalana w localStorage,
+ * "Baza danych" makiety: kopia danych z `mock.ts` trzymana w pamięci i utrwalana w localStorage,
  * żeby cały proces dało się przeklikać i przeżył odświeżenie strony.
+ * Dane są generowane względem bieżącej daty – następnego dnia makieta zaczyna od nowa.
  */
-const STORAGE_KEY = 'mws-mock-db-v2';
+const STORAGE_KEY = 'airflow-mobile-db-v1';
 
 let db: Db | null = null;
 
@@ -14,9 +15,10 @@ export function getDb(): Db {
 
 	try {
 		let raw = localStorage.getItem(STORAGE_KEY);
-		db = raw ? (JSON.parse(raw) as Db) : structuredClone(seed);
+		let stored = raw ? (JSON.parse(raw) as Db) : null;
+		db = stored && stored.seededOn === day(0) ? stored : createSeed();
 	} catch {
-		db = structuredClone(seed);
+		db = createSeed();
 	}
 
 	return db;
@@ -26,11 +28,11 @@ export function commit(): void {
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 	} catch {
-		// brak localStorage (tryb prywatny itp.) – stan zostaje tylko w pamięci
+		// brak localStorage (tryb prywatny, przekroczony limit) – stan zostaje tylko w pamięci
 	}
 }
 
 export function reset(): void {
-	db = structuredClone(seed);
+	db = createSeed();
 	commit();
 }

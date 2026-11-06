@@ -7,7 +7,7 @@ import { env } from '$env/dynamic/private';
  * więc nie da się jej podrobić w przeglądarce.
  */
 const ACCOUNTS = [
-	{ login: 'magazyn', password: 'mws2026', name: 'Jan Kowalski' },
+	{ login: 'magazyn', password: 'mws2026', name: 'TC52 #07' },
 	{ login: 'demo', password: 'demo2026', name: 'Konto demo' }
 ];
 

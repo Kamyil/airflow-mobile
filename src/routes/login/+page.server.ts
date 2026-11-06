@@ -18,6 +18,6 @@ export const actions: Actions = {
 			sameSite: 'lax',
 			maxAge: SESSION_MAX_AGE
 		});
-		redirect(303, '/kompletacja');
+		redirect(303, '/pin');
 	}
 };
