@@ -303,6 +303,15 @@ export function allocationDetailDTO(db: Db, o: AllocationOrder): AllocationDetai
 
 // --- przesunięcia ------------------------------------------------------------------
 
+/** Cel przesunięcia bez wskazanej lokalizacji: inne miejsce z tym produktem albo wolne w strefie */
+function suggestTarget(db: Db, warehouseId: string, productId: string, from: string): string {
+	let other = db.stock.find((s) => s.warehouseId === warehouseId && s.productId === productId && s.location !== from && !s.location.startsWith('ODST'));
+	if (other) return other.location;
+	let zone = from.slice(0, 1);
+	let occupied = new Set(db.stock.filter((s) => s.warehouseId === warehouseId).map((s) => s.location));
+	return db.locations.find((l) => l.warehouseId === warehouseId && l.kind === 'STORAGE' && l.zone === zone && !occupied.has(l.code))?.code ?? from;
+}
+
 export const movedQty = (l: Transfer['lines'][number]) => sum(l.moves, (m) => m.qty);
 
 export function transferDTO(db: Db, t: Transfer): TransferDTO {
@@ -311,7 +320,8 @@ export function transferDTO(db: Db, t: Transfer): TransferDTO {
 		product: find(db.products, l.productId),
 		movedQty: movedQty(l),
 		remainingQty: Math.max(0, l.qty - movedQty(l)),
-		availableQty: stockAt(db, t.warehouseId, l.fromLocation, l.productId, l.batch)
+		availableQty: stockAt(db, t.warehouseId, l.fromLocation, l.productId, l.batch),
+		suggestedTo: l.toLocation ?? suggestTarget(db, t.warehouseId, l.productId, l.fromLocation)
 	}));
 	let ordered = [...lines].sort((a, b) => locSeq(db, t.warehouseId, a.fromLocation) - locSeq(db, t.warehouseId, b.fromLocation));
 	let { lines: _, ...rest } = t;

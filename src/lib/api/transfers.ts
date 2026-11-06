@@ -33,6 +33,20 @@ export function getLocationStock(warehouseId: string, code: string): Promise<Loc
 	});
 }
 
+/** Makieta: kilka lokalizacji z towarem – do podpowiedzi "symuluj skan" */
+export function sampleLocations(warehouseId: string): Promise<string[]> {
+	return query((db) => [...new Set(db.stock.filter((s) => s.warehouseId === warehouseId && !s.location.startsWith('ODST')).map((s) => s.location))].slice(0, 4));
+}
+
+/** Makieta: wolne lokalizacje – podpowiedź celu przesunięcia */
+export function sampleFreeLocations(warehouseId: string, near: string): Promise<string[]> {
+	return query((db) => {
+		let occupied = new Set(db.stock.filter((s) => s.warehouseId === warehouseId).map((s) => s.location));
+		let zone = near.slice(0, 1);
+		return db.locations.filter((l) => l.warehouseId === warehouseId && l.kind === 'STORAGE' && l.zone === zone && !occupied.has(l.code)).slice(0, 3).map((l) => l.code);
+	});
+}
+
 /** Wyszukanie produktu po EAN / indeksie */
 export function findProduct(code: string): Promise<Product> {
 	return query((db) => {

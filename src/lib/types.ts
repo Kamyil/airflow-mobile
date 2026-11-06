@@ -739,6 +739,8 @@ export interface TransferLineDTO extends TransferLine {
 	remainingQty: number;
 	/** Aktualny stan na lokalizacji źródłowej */
 	availableQty: number;
+	/** Cel z dokumentu albo podpowiedź MWS, gdy dokument nie wskazuje celu */
+	suggestedTo: string;
 }
 
 export interface TransferDTO extends Omit<Transfer, 'lines'> {
