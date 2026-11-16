@@ -50,7 +50,6 @@
 		if (d) setParams({ data: d, dni: null });
 	}
 	let multiDay = $derived(f.offsets.length > 1);
-	let pallets = $derived(data.advices.reduce((n, a) => n + a.pallets, 0));
 
 	// --- szczegóły awizacji ---
 	let detail = $state<AdviceDetailDTO | null>(null);
@@ -105,7 +104,7 @@
 	<SearchBox bind:value={() => q, onSearch} placeholder="Dostawca, nr ZZ, awizacja, rejestracja…" />
 	<p class="px-1 text-xs text-muted">
 		<b class="text-ink">{data.advices.length}</b>
-		{plural(data.advices.length, 'awizacja', 'awizacje', 'awizacji')} · razem <b class="text-ink">{pallets}</b> pal.
+		{plural(data.advices.length, 'awizacja', 'awizacje', 'awizacji')}
 	</p>
 </div>
 
@@ -128,8 +127,8 @@
 					<div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
 						<span class="flex items-center gap-1"><Warehouse class="size-3.5" />{a.warehouse.code}</span>
 						<span class="flex items-center gap-1"><Truck class="size-3.5" />{a.vehicle.plate}</span>
-						<span class="flex items-center gap-1 font-bold text-ink"><Layers class="size-3.5" />{a.pallets} {plural(a.pallets, 'paleta', 'palety', 'palet')}</span>
-						<span>{a.lines} poz.</span>
+						<span class="font-bold text-ink">{a.lines} poz.</span>
+						{#if a.pallets}<span class="flex items-center gap-1"><Layers class="size-3.5" />{a.pallets} {plural(a.pallets, 'paleta', 'palety', 'palet')}</span>{/if}
 					</div>
 					{#if a.partiallyReceived || a.late}
 						<div class="mt-2 flex flex-wrap gap-1.5">
@@ -152,7 +151,7 @@
 		<dl class="divide-y divide-line rounded-xl border border-line text-sm">
 			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Magazyn / DOK</dt><dd class="font-semibold">{detail.warehouse.code} · {detail.dock.name}</dd></div>
 			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Auto</dt><dd class="font-mono font-semibold">{detail.vehicle.plate}</dd></div>
-			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Palety</dt><dd class="font-semibold">{detail.pallets}</dd></div>
+			{#if detail.pallets}<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Palety</dt><dd class="font-semibold">{detail.pallets}</dd></div>{/if}
 			<div class="flex items-center justify-between gap-4 px-3 py-2.5">
 				<dt class="text-muted">Kierowca</dt>
 				<dd class="flex items-center gap-2 font-semibold">{detail.vehicle.driver}<a href="tel:{detail.vehicle.phone.replaceAll(' ', '')}" class="grid size-8 place-items-center rounded-full bg-ok-soft text-ok" aria-label="Zadzwoń"><Phone class="size-4" /></a></dd>

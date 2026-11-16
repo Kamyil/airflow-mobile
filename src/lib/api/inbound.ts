@@ -1,6 +1,6 @@
 import { find } from '$lib/mock/domain';
 import { addStock, adviceDTO, openReceiptOf, receiptDTO, receivedOnPoLine, suggestLocation } from '$lib/mock/warehouse';
-import type { AdviceDetailDTO, AdviceDTO, BatchEntry, Db, GoodsLabelDTO, Receipt, ReceiptDTO } from '$lib/types';
+import type { AdviceDetailDTO, AdviceDTO, BatchEntry, Db, GoodsLabelDTO, Receipt, ReceiptDocumentKind, ReceiptDTO } from '$lib/types';
 import { ApiError, latency, mutate, now, query, requireOnline, who } from './core';
 import { assertSupervisor } from './session';
 
@@ -88,7 +88,9 @@ export function startReceipt(adviceId: string): Promise<{ receiptId: string; cre
 			})),
 			approval: null,
 			allocationOrderId: null,
-			labelsPrintedAt: null
+			mwsSkipped: false,
+			labelsPrintedAt: null,
+			documents: []
 		});
 		return { receiptId: id, created: true };
 	});
@@ -193,53 +195,131 @@ export function requestApproval(receiptId: string): Promise<void> {
  * "Zakończ przyjęcie": zamyka PZ, towar trafia na miejsce odstawcze DOKu,
  * a Impuls generuje zlecenie magazynowe MWS (alokacja). Rozbieżności wymagają PIN-u przełożonego.
  */
-export async function closeReceipt(receiptId: string, approval?: { pin: string; note: string }): Promise<{ allocationOrderId: string; number: string }> {
-	requireOnline('generowanie zlecenia magazynowego MWS w Impulsie');
-	await latency(1400, 700); // wywołanie funkcji Impulsa trwa dłużej
-	return mutate('Zamknięcie PZ', (db) => {
+export interface CloseReceiptOptions {
+	/** PIN + uwaga przełożonego, gdy są rozbieżności */
+	approval?: { pin: string; note: string };
+	/** false = zamknij PZ bez wywołania Impulsa "generuj zlecenie magazynowe MWS" */
+	generateMws: boolean;
+}
+
+/** Zamknięcie PZ: towar na miejsce odstawcze DOKu, opcjonalnie Impuls generuje zlecenie MWS (alokacja) */
+export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions): Promise<{ allocationOrderId: string | null; number: string | null }> {
+	requireOnline(opts.generateMws ? 'generowanie zlecenia magazynowego MWS w Impulsie' : 'zamknięcie PZ w Impulsie');
+	await latency(opts.generateMws ? 1400 : 700, 500); // wywołanie funkcji Impulsa trwa dłużej
+	return mutate(opts.generateMws ? 'Zamknięcie PZ' : 'Zamknięcie PZ bez zlecenia MWS', (db) => {
 		let r = editableReceipt(db, receiptId);
 		let dto = receiptDTO(db, r);
 		if (dto.blockers.length) throw new ApiError('VALIDATION', `Nie można zamknąć ${r.number}`, dto.blockers);
 
 		if (dto.discrepancies.length) {
-			if (!approval) throw new ApiError('APPROVAL_REQUIRED', 'Rozbieżności wymagają zatwierdzenia przełożonego');
-			let supervisor = assertSupervisor(db, approval.pin);
-			r.approval = { by: supervisor.name, at: now(), note: approval.note.trim() };
+			if (!opts.approval) throw new ApiError('APPROVAL_REQUIRED', 'Rozbieżności wymagają zatwierdzenia przełożonego');
+			let supervisor = assertSupervisor(db, opts.approval.pin);
+			r.approval = { by: supervisor.name, at: now(), note: opts.approval.note.trim() };
 		}
 
 		let dock = find(db.docks, r.dockId);
-		for (let l of r.lines) {
-			if (l.receivedQty === 0) continue;
-			let p = find(db.products, l.productId);
-			let parts = p.tracking === 'BATCH' ? l.batches.map((b) => ({ qty: b.qty, batch: b.batch, expiry: b.expiry, serials: [] as string[] })) : [{ qty: l.receivedQty, batch: null, expiry: null, serials: l.serials }];
-			for (let part of parts) addStock(db, { warehouseId: r.warehouseId, location: dock.stagingLocation, productId: l.productId, ...part });
-		}
-
-		// --- Impuls: "generuj zlecenie magazynowe MWS" ---
-		let seq = db.counters.allocation++;
-		let id = `zm-${String(seq).padStart(4, '0')}`;
-		let number = `ZM/${now().slice(0, 4)}/${String(seq).padStart(4, '0')}`;
-		let lines = r.lines
-			.filter((l) => l.receivedQty > 0)
-			.flatMap((l) => {
-				let p = find(db.products, l.productId);
-				let parts = p.tracking === 'BATCH' ? l.batches.map((b) => ({ qty: b.qty, batch: b.batch, expiry: b.expiry, serials: [] as string[] })) : [{ qty: l.receivedQty, batch: null, expiry: null, serials: l.serials }];
-				return parts.map((part) => ({ productId: l.productId, ...part }));
-			})
-			.map((l, i) => ({
-				id: `${id}-${i + 1}`,
-				...l,
-				fromLocation: dock.stagingLocation,
-				suggestedLocation: suggestLocation(db, r.warehouseId, l.productId),
-				placements: []
-			}));
-		db.allocationOrders.push({ id, number, receiptId: r.id, warehouseId: r.warehouseId, createdAt: now(), startedAt: null, doneAt: null, lines, deferredLineIds: [] });
+		for (let part of receivedParts(db, r)) addStock(db, { warehouseId: r.warehouseId, location: dock.stagingLocation, ...part });
 
 		r.status = 'DONE';
 		r.closedAt = now();
 		r.closedBy = who();
-		r.allocationOrderId = id;
-		return { allocationOrderId: id, number };
+		if (!opts.generateMws) {
+			r.mwsSkipped = true;
+			return { allocationOrderId: null, number: null };
+		}
+		return createAllocationOrder(db, r);
+	});
+}
+
+/** PZ zamknięta bez zlecenia MWS – wygeneruj je jednak później */
+export async function generateMwsOrder(receiptId: string): Promise<{ allocationOrderId: string; number: string }> {
+	requireOnline('generowanie zlecenia magazynowego MWS w Impulsie');
+	await latency(1400, 700);
+	return mutate('Generowanie zlecenia MWS', (db) => {
+		let r = find(db.receipts, receiptId);
+		if (r.status !== 'DONE') throw new ApiError('VALIDATION', 'Najpierw zakończ przyjęcie');
+		if (r.allocationOrderId) throw new ApiError('VALIDATION', 'Zlecenie MWS już istnieje');
+		return createAllocationOrder(db, r);
+	});
+}
+
+/** Przyjęty towar w podziale na partie / numery seryjne */
+function receivedParts(db: Db, r: Receipt) {
+	return r.lines
+		.filter((l) => l.receivedQty > 0)
+		.flatMap((l) => {
+			let p = find(db.products, l.productId);
+			let parts = p.tracking === 'BATCH' ? l.batches.map((b) => ({ qty: b.qty, batch: b.batch, expiry: b.expiry, serials: [] as string[] })) : [{ qty: l.receivedQty, batch: null, expiry: null, serials: l.serials }];
+			return parts.map((part) => ({ productId: l.productId, ...part }));
+		});
+}
+
+/** Impuls: "generuj zlecenie magazynowe MWS" – z miejsca odstawczego na półki */
+function createAllocationOrder(db: Db, r: Receipt): { allocationOrderId: string; number: string } {
+	let dock = find(db.docks, r.dockId);
+	let seq = db.counters.allocation++;
+	let id = `zm-${String(seq).padStart(4, '0')}`;
+	let number = `ZM/${now().slice(0, 4)}/${String(seq).padStart(4, '0')}`;
+	let lines = receivedParts(db, r).map((l, i) => ({
+		id: `${id}-${i + 1}`,
+		...l,
+		fromLocation: dock.stagingLocation,
+		suggestedLocation: suggestLocation(db, r.warehouseId, l.productId),
+		placements: []
+	}));
+	db.allocationOrders.push({ id, number, receiptId: r.id, warehouseId: r.warehouseId, createdAt: now(), startedAt: null, doneAt: null, lines, deferredLineIds: [] });
+	r.allocationOrderId = id;
+	r.mwsSkipped = false;
+	return { allocationOrderId: id, number };
+}
+
+/**
+ * Korekta serii / daty ważności – także po zamknięciu PZ (np. pomyłka przy przepisywaniu z etykiety).
+ * Ilości się nie zmieniają; poprawka idzie na pozycję PZ, stany magazynowe i zlecenie MWS.
+ */
+export function correctReceiptBatch(receiptId: string, lineId: string, index: number, input: { batch: string; expiry: string | null }): Promise<void> {
+	return mutate('Korekta serii', (db) => {
+		let r = find(db.receipts, receiptId);
+		let line = r.lines.find((l) => l.id === lineId);
+		let entry = line?.batches[index];
+		if (!line || !entry) throw new ApiError('NOT_FOUND', 'Nie znaleziono serii na pozycji');
+		let batch = input.batch.trim().toUpperCase();
+		if (!batch) throw new ApiError('VALIDATION', 'Podaj numer serii');
+		if (batch === entry.batch && input.expiry === entry.expiry) throw new ApiError('VALIDATION', 'Nic się nie zmieniło');
+		if (batch !== entry.batch && line.batches.some((b, i) => i !== index && b.batch === batch)) throw new ApiError('VALIDATION', `Seria ${batch} jest już na tej pozycji`);
+
+		let old = { batch: entry.batch, expiry: entry.expiry };
+		entry.batch = batch;
+		entry.expiry = input.expiry;
+		(line.batchCorrections ??= []).push({ from: old.batch, to: batch, expiryFrom: old.expiry, expiryTo: input.expiry, by: who(), at: now() });
+
+		// stany: wiersze tej partii w magazynie PZ (miejsce odstawcze albo już na półkach)
+		for (let s of db.stock.filter((s) => s.warehouseId === r.warehouseId && s.productId === line.productId && s.batch === old.batch)) {
+			s.batch = batch;
+			s.expiry = input.expiry;
+		}
+		// zlecenie MWS (alokacja) wygenerowane z tej PZ
+		let zm = r.allocationOrderId ? db.allocationOrders.find((o) => o.id === r.allocationOrderId) : null;
+		for (let l of zm?.lines.filter((l) => l.productId === line.productId && l.batch === old.batch) ?? []) {
+			l.batch = batch;
+			l.expiry = input.expiry;
+		}
+	});
+}
+
+/** Zdjęcia dokumentów dostawy (WZ, CMR, faktura…) – na poziomie PZ */
+export function addReceiptDocuments(receiptId: string, kind: ReceiptDocumentKind, photos: string[]): Promise<void> {
+	return mutate('Dodanie dokumentów do PZ', (db) => {
+		if (!photos.length) throw new ApiError('VALIDATION', 'Zrób co najmniej jedno zdjęcie');
+		let r = find(db.receipts, receiptId);
+		for (let src of photos) r.documents.push({ id: `doc-${db.counters.photo++}`, kind, src, takenAt: now(), by: who() });
+	});
+}
+
+export function removeReceiptDocument(receiptId: string, documentId: string): Promise<void> {
+	return mutate('Usunięcie dokumentu z PZ', (db) => {
+		let r = find(db.receipts, receiptId);
+		r.documents = r.documents.filter((d) => d.id !== documentId);
 	});
 }
 

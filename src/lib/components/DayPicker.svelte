@@ -2,10 +2,10 @@
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import { addDays, fmtDayLong, todayStr } from '$lib/format';
 
-	/** Wybór dnia: szybkie chipy (wczoraj … pojutrze) + kalendarz */
-	let { value, onChange }: { value: string; onChange: (d: string) => void } = $props();
+	/** Wybór dnia: szybkie chipy (przesunięcia względem dziś) + kalendarz */
+	let { value, onChange, offsets = [-2, -1, 0] }: { value: string; onChange: (d: string) => void; offsets?: number[] } = $props();
 
-	let days = $derived([-1, 0, 1, 2].map((o) => addDays(todayStr(), o)));
+	let days = $derived(offsets.map((o) => addDays(todayStr(), o)));
 	let custom = $derived(!days.includes(value));
 </script>
 

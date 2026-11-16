@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
-	import { ApiError, closeReceipt, mockScanner, printReceiptLabels, requestApproval, scanReceiptProduct, updateReceiptLine, verifySupervisorPin, type ReceiptLineInput } from '$lib/api';
+	import { ApiError, closeReceipt, generateMwsOrder, mockScanner, printReceiptLabels, requestApproval, scanReceiptProduct, updateReceiptLine, verifySupervisorPin, type ReceiptLineInput } from '$lib/api';
 	import type { GoodsLabelDTO, ReceiptLineDTO } from '$lib/types';
 	import { toast } from '$lib/toast.svelte';
 	import { fmtDate, fmtDateTime, fmtDiff, fmtTime } from '$lib/format';
@@ -9,12 +9,15 @@
 	import Badge from '$lib/components/Badge.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import ScanInput from '$lib/components/ScanInput.svelte';
-	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import StatusBadge, { STATUS } from '$lib/components/StatusBadge.svelte';
 	import ProductFlags from '$lib/components/ProductFlags.svelte';
 	import Progress from '$lib/components/Progress.svelte';
 	import SupervisorSheet from '$lib/components/SupervisorSheet.svelte';
 	import GoodsLabelsSheet from '$lib/components/GoodsLabelsSheet.svelte';
 	import ReceiptLineSheet from './ReceiptLineSheet.svelte';
+	import ReceiptDocuments from './ReceiptDocuments.svelte';
+	import BatchCorrectionSheet from './BatchCorrectionSheet.svelte';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import Truck from '@lucide/svelte/icons/truck';
 	import Check from '@lucide/svelte/icons/check';
 	import Circle from '@lucide/svelte/icons/circle';
@@ -29,6 +32,7 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import Send from '@lucide/svelte/icons/send';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import Ban from '@lucide/svelte/icons/ban';
 
 	let { data } = $props();
 	let r = $derived(data.receipt);
@@ -39,8 +43,19 @@
 	let editing = $state<ReceiptLineDTO | null>(null);
 	let lineOpen = $state(false);
 
+	// --- korekta serii na zrealizowanej PZ ---
+	let correctingId = $state<string | null>(null);
+	let correctOpen = $state(false);
+	let correcting = $derived(r.lines.find((l) => l.id === correctingId) ?? null);
+
 	function openLine(l: ReceiptLineDTO) {
-		if (done) return;
+		if (done) {
+			if (l.batches.length) {
+				correctingId = l.id;
+				correctOpen = true;
+			}
+			return;
+		}
 		editing = l;
 		lineOpen = true;
 	}
@@ -83,14 +98,16 @@
 	let closeOpen = $state(false);
 	let approvalOpen = $state(false);
 	let phase = $state<'idle' | 'generating' | 'success'>('idle');
-	let result = $state<{ allocationOrderId: string; number: string } | null>(null);
+	let result = $state<{ allocationOrderId: string | null; number: string | null } | null>(null);
+	/** Czy po zamknięciu wywołać w Impulsie "generuj zlecenie magazynowe MWS" */
+	let generateMws = $state(true);
 
 	async function finish(approval?: { pin: string; note: string }) {
 		closeOpen = false;
 		approvalOpen = false;
 		phase = 'generating';
 		try {
-			result = await closeReceipt(r.id, approval);
+			result = await closeReceipt(r.id, { approval, generateMws });
 			phase = 'success';
 		} catch (e) {
 			phase = 'idle';
@@ -125,7 +142,20 @@
 		}
 	}
 
+	async function generateLater() {
+		phase = 'generating';
+		generateMws = true;
+		try {
+			result = await generateMwsOrder(r.id);
+			phase = 'success';
+		} catch (e) {
+			phase = 'idle';
+			toast.error(e);
+		}
+	}
+
 	function startClose() {
+		generateMws = true;
 		if (r.status === 'AWAITING_APPROVAL' && !r.blockers.length) approvalOpen = true;
 		else closeOpen = true;
 	}
@@ -155,7 +185,7 @@
 	const lineState = (l: ReceiptLineDTO) => (!l.checked ? 'todo' : l.trackingMissing ? 'bad' : l.diff !== 0 ? 'warn' : 'ok');
 </script>
 
-<PageHeader title={r.number} subtitle={r.supplier.name} back={done ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
+<PageHeader title={r.number} titleNote={STATUS[r.status]?.[0]} subtitle={r.supplier.name} back={done ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
 
 <div class="flex flex-col gap-3 p-3 {done ? '' : 'pb-28'}">
 	<!-- nagłówek dostawy -->
@@ -184,6 +214,8 @@
 		</section>
 	{/if}
 
+	<ReceiptDocuments receiptId={r.id} number={r.number} documents={r.documents} />
+
 	{#if done}
 		<!-- PZ zrealizowana: MWS, alokacja, etykiety -->
 		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
@@ -196,7 +228,17 @@
 				</div>
 			{/if}
 		</section>
-		{#if r.allocation}
+		{#if r.mwsSkipped}
+			<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
+				<p class="text-xs font-bold tracking-wide text-muted uppercase">Zlecenie magazynowe MWS</p>
+				<p class="mt-1 flex items-center gap-2 font-bold"><Ban class="size-5 text-muted" />Nie wygenerowano</p>
+				<p class="mt-0.5 text-sm text-muted">PZ zamknięta bez zlecenia – towar leży na <b class="text-ink">{r.dock.stagingLocation}</b> i nie trafi do Alokacji.</p>
+				<div class="mt-3 grid grid-cols-2 gap-2">
+					<Button loading={busy} onclick={printLabels}><Printer class="size-4" />Etykiety</Button>
+					<Button variant="task" onclick={generateLater}><ArrowDownToLine class="size-4" />Generuj ZM</Button>
+				</div>
+			</section>
+		{:else if r.allocation}
 			<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
 				<p class="text-xs font-bold tracking-wide text-muted uppercase">Zlecenie magazynowe MWS</p>
 				<div class="mt-1 flex items-center justify-between gap-2">
@@ -224,7 +266,7 @@
 			{#each r.lines as l (l.id)}
 				{@const st = lineState(l)}
 				<li class="border-t border-line first:border-0">
-					<button type="button" class="flex w-full items-start gap-3 p-3 text-left {done ? '' : 'active:bg-bg'}" onclick={() => openLine(l)}>
+					<button type="button" class="flex w-full items-start gap-3 p-3 text-left {!done || l.batches.length ? 'active:bg-bg' : ''}" onclick={() => openLine(l)}>
 						<span class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full {st === 'ok' ? 'bg-ok text-white' : st === 'warn' ? 'bg-warn text-white' : st === 'bad' ? 'bg-bad text-white' : 'bg-bg text-muted'}">
 							{#if st === 'ok'}<Check class="size-4" strokeWidth={3} />{:else if st === 'warn'}<TriangleAlert class="size-4" />{:else if st === 'bad'}<CircleAlert class="size-4" />{:else}<Circle class="size-3" />{/if}
 						</span>
@@ -233,6 +275,8 @@
 							<span class="block font-mono text-xs text-muted">{l.product.sku} · {l.purchaseOrderNumber}</span>
 							<span class="mt-1 flex flex-wrap gap-1"><ProductFlags product={l.product} size="sm" /></span>
 							{#if l.batches.length}<span class="mt-1 block text-xs text-info">Seria: {l.batches.map((b) => `${b.batch} (${b.qty})`).join(', ')}</span>{/if}
+							{#if l.batchCorrections?.length}<span class="mt-0.5 block text-xs text-muted">Poprawiono serię ({l.batchCorrections.length}×), ostatnio {l.batchCorrections.at(-1)!.by}</span>{/if}
+							{#if done && l.batches.length}<span class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-ink-2 underline underline-offset-2"><Pencil class="size-3" />Popraw serię</span>{/if}
 							{#if l.serials.length}<span class="mt-1 block text-xs text-ink-2">SN: {l.serials.join(', ')}</span>{/if}
 							{#if l.trackingMissing}<span class="mt-1 block text-xs font-bold text-bad">{l.trackingMissing}</span>{/if}
 							{#if l.note}<span class="mt-1 block text-xs text-warn">„{l.note}”</span>{/if}
@@ -255,6 +299,12 @@
 			<Button variant={r.blockers.length ? 'primary' : 'ok'} size="lg" class="w-full" onclick={startClose}><Lock class="size-5" />Zakończ przyjęcie</Button>
 		</div>
 	</div>
+{/if}
+
+{#if correcting}
+	{#key correcting.id}
+		<BatchCorrectionSheet bind:open={correctOpen} receiptId={r.id} line={correcting} />
+	{/key}
 {/if}
 
 {#if editing}
@@ -285,7 +335,14 @@
 		{:else}
 			<p class="flex items-center gap-2 rounded-xl bg-ok-soft p-3 text-sm font-semibold text-ok"><Check class="size-5" />Wszystkie pozycje zgodne z zamówieniem</p>
 		{/if}
-		<p class="mt-3 text-sm text-muted">Po zamknięciu towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>, a Impuls wygeneruje zlecenie magazynowe MWS (alokacja).</p>
+		<label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 {generateMws ? 'border-ink' : 'border-line'}">
+			<input type="checkbox" bind:checked={generateMws} class="mt-0.5 size-5 shrink-0 accent-ink" />
+			<span class="text-sm">
+				<b class="block">Generuj zlecenie magazynowe MWS</b>
+				<span class="text-muted">{generateMws ? 'Impuls utworzy zlecenie alokacji: z miejsca odstawczego na półki.' : 'Bez zlecenia – towar zostanie na miejscu odstawczym i nie pojawi się w Alokacji. Zlecenie można wygenerować później z podglądu PZ.'}</span>
+			</span>
+		</label>
+		<p class="mt-3 text-sm text-muted">Po zamknięciu towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>.</p>
 	{/if}
 	{#snippet footer()}
 		{#if !r.blockers.length}
@@ -293,7 +350,7 @@
 				<Button variant="primary" size="lg" onclick={() => ((closeOpen = false), (approvalOpen = true))}><ShieldCheck class="size-5" />Potwierdź z przełożonym</Button>
 				{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Przełożonego nie ma – wyślij do akceptacji</Button>{/if}
 			{:else}
-				<Button variant="ok" size="lg" onclick={() => finish()}><Lock class="size-5" />Zakończ i generuj zlecenie MWS</Button>
+				<Button variant="ok" size="lg" onclick={() => finish()}><Lock class="size-5" />{generateMws ? 'Zakończ i generuj zlecenie MWS' : 'Zakończ bez zlecenia MWS'}</Button>
 			{/if}
 		{/if}
 		<Button variant="ghost" onclick={() => (closeOpen = false)}>Wróć do przyjmowania</Button>
@@ -320,20 +377,26 @@
 			<div class="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
 				<LoaderCircle class="size-14 animate-spin text-task" />
 				<p class="text-xl font-extrabold">Zamykam {r.number}</p>
-				<p class="text-white/70">Impuls generuje zlecenie magazynowe MWS…</p>
+				<p class="text-white/70">{generateMws ? 'Impuls generuje zlecenie magazynowe MWS…' : 'Zamykam PZ w Impulsie (bez zlecenia MWS)…'}</p>
 			</div>
 		{:else if result}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
 				<span class="grid size-20 place-items-center rounded-full bg-ok"><Check class="size-11" strokeWidth={3} /></span>
-				<p class="mt-2 text-2xl font-extrabold">Przyjęcie zakończone</p>
+				<p class="mt-2 text-2xl font-extrabold">{r.status === 'DONE' && result.number ? 'Zlecenie wygenerowane' : 'Przyjęcie zakończone'}</p>
 				<p class="text-white/70">{r.number} zrealizowana. Towar leży na <b class="text-white">{r.dock.stagingLocation}</b>.</p>
 				<div class="mt-3 rounded-2xl bg-white/10 px-5 py-3">
 					<p class="text-xs tracking-wide text-white/60 uppercase">Zlecenie magazynowe MWS</p>
-					<p class="font-mono text-2xl font-extrabold text-task">{result.number}</p>
+					{#if result.number}
+						<p class="font-mono text-2xl font-extrabold text-task">{result.number}</p>
+					{:else}
+						<p class="text-lg font-extrabold">Nie generowano</p>
+					{/if}
 				</div>
 			</div>
 			<div class="pb-safe flex flex-col gap-2 p-4">
-				<Button variant="task" size="xl" onclick={() => afterSuccess(`/alokacja/${result!.allocationOrderId}`)}><ArrowDownToLine class="size-6" />Rozpocznij alokację</Button>
+				{#if result.allocationOrderId}
+					<Button variant="task" size="xl" onclick={() => afterSuccess(`/alokacja/${result!.allocationOrderId}`)}><ArrowDownToLine class="size-6" />Rozpocznij alokację</Button>
+				{/if}
 				<Button size="lg" onclick={() => afterSuccess(`/dostawy/pz/${r.id}`).then(printLabels)}><Printer class="size-5" />Drukuj etykiety</Button>
 				<Button variant="ghost" class="text-white hover:bg-white/10" onclick={() => afterSuccess('/dostawy/do-przyjecia')}>Wróć do dostaw</Button>
 			</div>

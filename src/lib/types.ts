@@ -428,8 +428,8 @@ export interface Advice {
 	/** Jedna awizacja (jedno auto) może obejmować kilka ZZ */
 	purchaseOrderIds: string[];
 	vehicle: { plate: string; driver: string; phone: string };
-	/** Liczba palet zgłoszona w awizacji */
-	pallets: number;
+	/** Liczba palet – tylko jeśli dostawca podał ją w awizacji */
+	pallets: number | null;
 	note: string | null;
 }
 
@@ -453,6 +453,17 @@ export interface ReceiptLine {
 	serials: string[];
 	note: string | null;
 	checkedAt: string | null;
+	/** Korekty serii po zamknięciu PZ (historia) */
+	batchCorrections?: BatchCorrection[];
+}
+
+export interface BatchCorrection {
+	from: string;
+	to: string;
+	expiryFrom: string | null;
+	expiryTo: string | null;
+	by: string;
+	at: string;
 }
 
 export interface Approval {
@@ -478,7 +489,22 @@ export interface Receipt {
 	approval: Approval | null;
 	/** Zlecenie magazynowe MWS wygenerowane przez Impuls po zamknięciu */
 	allocationOrderId: string | null;
+	/** Zamknięta świadomie bez generowania zlecenia MWS */
+	mwsSkipped: boolean;
 	labelsPrintedAt: string | null;
+	/** Zdjęcia dokumentów dostawy (WZ, CMR…) – na poziomie PZ, nie pozycji */
+	documents: ReceiptDocument[];
+}
+
+export type ReceiptDocumentKind = 'WZ' | 'CMR' | 'FAKTURA' | 'INNY';
+
+export interface ReceiptDocument {
+	id: string;
+	kind: ReceiptDocumentKind;
+	/** data URL (zmniejszone zdjęcie) */
+	src: string;
+	takenAt: string;
+	by: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +657,7 @@ export interface AdviceDTO {
 	dock: Dock;
 	supplier: Supplier;
 	vehicle: Advice['vehicle'];
-	pallets: number;
+	pallets: number | null;
 	note: string | null;
 	purchaseOrders: { id: string; number: string; lines: number }[];
 	lines: number;
@@ -688,7 +714,9 @@ export interface ReceiptDTO {
 	/** Co blokuje zamknięcie PZ */
 	blockers: string[];
 	allocation: { id: string; number: string; status: AllocationStatus; linesDone: number; lines: number } | null;
+	mwsSkipped: boolean;
 	labelsPrintedAt: string | null;
+	documents: ReceiptDocument[];
 	flags: ProductFlags;
 }
 

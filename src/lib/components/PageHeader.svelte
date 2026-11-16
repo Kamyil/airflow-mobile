@@ -8,6 +8,8 @@
 
 	interface Props {
 		title: string;
+		/** Dopisek obok tytułu w nawiasie, np. status dokumentu */
+		titleNote?: string;
 		subtitle?: string;
 		back?: string;
 		actions?: Snippet;
@@ -15,7 +17,7 @@
 		/** Menu operatora po prawej (domyślnie tak) */
 		menu?: boolean;
 	}
-	let { title, subtitle, back, actions, below, menu = true }: Props = $props();
+	let { title, titleNote, subtitle, back, actions, below, menu = true }: Props = $props();
 </script>
 
 <header class="pt-safe sticky top-0 z-30 bg-ink text-white">
@@ -37,7 +39,7 @@
 			<div class="w-2"></div>
 		{/if}
 		<div class="min-w-0 flex-1 py-2">
-			<h1 class="truncate text-lg leading-tight font-extrabold">{title}</h1>
+			<h1 class="truncate text-lg leading-tight font-extrabold">{title}{#if titleNote}<span class="ml-1.5 text-[15px] font-semibold text-white/75">({titleNote})</span>{/if}</h1>
 			{#if subtitle}<p class="truncate text-[13px] text-white/65">{subtitle}</p>{/if}
 		</div>
 		{@render actions?.()}

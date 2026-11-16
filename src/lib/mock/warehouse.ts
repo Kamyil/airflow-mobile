@@ -175,7 +175,9 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 					linesDone: alloc.lines.filter((l) => placedQty(l) >= l.qty).length
 				}
 			: null,
+		mwsSkipped: r.mwsSkipped,
 		labelsPrintedAt: r.labelsPrintedAt,
+		documents: r.documents,
 		flags: flagsOf(lines.map((l) => l.product))
 	};
 }

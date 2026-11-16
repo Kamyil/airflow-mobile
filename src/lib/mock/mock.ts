@@ -279,31 +279,31 @@ export function createSeed(): Db {
 		// Awizacje – zapowiedziane dostawy (jedno auto, jeden DOK, slot czasowy)
 		advices: [
 			{ id: 'aw-a1', number: `AW/${YM()}/0412`, date: day(-1), slotFrom: '07:00', slotTo: '08:00', warehouseId: 'mg01', dockId: 'd1', supplierId: 's1', purchaseOrderIds: ['po01'],
-				vehicle: { plate: 'TK 4821C', driver: 'Tomasz Lis', phone: '+48 601 220 114' }, pallets: 6, note: null },
+				vehicle: { plate: 'TK 4821C', driver: 'Tomasz Lis', phone: '+48 601 220 114' }, pallets: null, note: null },
 			{ id: 'aw-a2', number: `AW/${YM()}/0413`, date: day(-1), slotFrom: '10:00', slotTo: '11:00', warehouseId: 'mg01', dockId: 'd2', supplierId: 's5', purchaseOrderIds: ['po02'],
-				vehicle: { plate: 'EL 77310', driver: 'Kamil Dąbrowski', phone: '+48 512 449 003' }, pallets: 4, note: null },
+				vehicle: { plate: 'EL 77310', driver: 'Kamil Dąbrowski', phone: '+48 512 449 003' }, pallets: null, note: null },
 			{ id: 'aw-b1', number: `AW/${YM()}/0418`, date: day(0), slotFrom: '06:00', slotTo: '07:00', warehouseId: 'mg01', dockId: 'd2', supplierId: 's2', purchaseOrderIds: ['po03'],
-				vehicle: { plate: 'KWA 30912', driver: 'Grzegorz Mazur', phone: '+48 698 110 772' }, pallets: 8, note: 'Dostawca dowiezie resztę drugim autem po 12:00' },
+				vehicle: { plate: 'KWA 30912', driver: 'Grzegorz Mazur', phone: '+48 698 110 772' }, pallets: null, note: 'Dostawca dowiezie resztę drugim autem po 12:00' },
 			{ id: 'aw-b2', number: `AW/${YM()}/0419`, date: day(0), slotFrom: '07:00', slotTo: '08:00', warehouseId: 'mg01', dockId: 'd1', supplierId: 's3', purchaseOrderIds: ['po04', 'po05'],
 				vehicle: { plate: 'EBE 5H210', driver: 'Robert Kaczmarek', phone: '+48 733 020 551' }, pallets: 14, note: 'Dłużyce – rozładunek boczny' },
 			{ id: 'aw-b3', number: `AW/${YM()}/0420`, date: day(0), slotFrom: '08:00', slotTo: '09:00', warehouseId: 'mg01', dockId: 'd2', supplierId: 's4', purchaseOrderIds: ['po06'],
-				vehicle: { plate: 'DW 9K442', driver: 'Paweł Szymański', phone: '+48 604 381 990' }, pallets: 2, note: null },
+				vehicle: { plate: 'DW 9K442', driver: 'Paweł Szymański', phone: '+48 604 381 990' }, pallets: null, note: null },
 			{ id: 'aw-b4', number: `AW/${YM()}/0417`, date: day(0), slotFrom: '06:30', slotTo: '07:30', warehouseId: 'mg01', dockId: 'd1', supplierId: 's1', purchaseOrderIds: ['po07'],
-				vehicle: { plate: 'TK 1190A', driver: 'Tomasz Lis', phone: '+48 601 220 114' }, pallets: 10, note: null },
+				vehicle: { plate: 'TK 1190A', driver: 'Tomasz Lis', phone: '+48 601 220 114' }, pallets: null, note: null },
 			{ id: 'aw-b5', number: `AW/${YM()}/0421`, date: day(0), slotFrom: '09:00', slotTo: '10:00', warehouseId: 'mg01', dockId: 'd1', supplierId: 's6', purchaseOrderIds: ['po08'],
-				vehicle: { plate: 'GA 82011', driver: 'Michał Wójcik', phone: '+48 502 667 128' }, pallets: 5, note: 'Towar delikatny – panele na stojakach' },
+				vehicle: { plate: 'GA 82011', driver: 'Michał Wójcik', phone: '+48 502 667 128' }, pallets: null, note: 'Towar delikatny – panele na stojakach' },
 			{ id: 'aw-b6', number: `AW/${YM()}/0423`, date: day(0), slotFrom: '13:00', slotTo: '14:00', warehouseId: 'mg01', dockId: 'd1', supplierId: 's7', purchaseOrderIds: ['po09'],
 				vehicle: { plate: 'EPI 44K01', driver: 'Adam Krawczyk', phone: '+48 691 004 337' }, pallets: 3, note: null },
 			{ id: 'aw-b7', number: `AW/${YM()}/0422`, date: day(0), slotFrom: '10:00', slotTo: '11:00', warehouseId: 'mg02', dockId: 'f1', supplierId: 's8', purchaseOrderIds: ['po10'],
-				vehicle: { plate: 'WR 6620E', driver: 'Łukasz Pawlak', phone: '+48 788 312 645' }, pallets: 7, note: null },
+				vehicle: { plate: 'WR 6620E', driver: 'Łukasz Pawlak', phone: '+48 788 312 645' }, pallets: null, note: null },
 			{ id: 'aw-b8', number: `AW/${YM()}/0424`, date: day(0), slotFrom: '14:30', slotTo: '15:30', warehouseId: 'mg01', dockId: 'd2', supplierId: 's5', purchaseOrderIds: ['po11'],
-				vehicle: { plate: 'EL 2N771', driver: 'Kamil Dąbrowski', phone: '+48 512 449 003' }, pallets: 4, note: null },
+				vehicle: { plate: 'EL 2N771', driver: 'Kamil Dąbrowski', phone: '+48 512 449 003' }, pallets: null, note: null },
 			{ id: 'aw-c1', number: `AW/${YM()}/0426`, date: day(1), slotFrom: '07:00', slotTo: '08:00', warehouseId: 'mg01', dockId: 'd1', supplierId: 's2', purchaseOrderIds: ['po12'],
 				vehicle: { plate: 'KWA 30912', driver: 'Grzegorz Mazur', phone: '+48 698 110 772' }, pallets: 12, note: null },
 			{ id: 'aw-c2', number: `AW/${YM()}/0427`, date: day(1), slotFrom: '11:00', slotTo: '12:00', warehouseId: 'mg02', dockId: 'f1', supplierId: 's3', purchaseOrderIds: ['po13'],
-				vehicle: { plate: 'EBE 1C045', driver: 'Robert Kaczmarek', phone: '+48 733 020 551' }, pallets: 9, note: null },
+				vehicle: { plate: 'EBE 1C045', driver: 'Robert Kaczmarek', phone: '+48 733 020 551' }, pallets: null, note: null },
 			{ id: 'aw-c3', number: `AW/${YM()}/0429`, date: day(-1), slotFrom: '14:00', slotTo: '15:00', warehouseId: 'mg01', dockId: 'd2', supplierId: 's1', purchaseOrderIds: ['po14'],
-				vehicle: { plate: 'TK 4821C', driver: 'Tomasz Lis', phone: '+48 601 220 114' }, pallets: 16, note: null }
+				vehicle: { plate: 'TK 4821C', driver: 'Tomasz Lis', phone: '+48 601 220 114' }, pallets: null, note: null }
 		],
 
 		// PZ – przyjęcia zewnętrzne
@@ -316,7 +316,7 @@ export function createSeed(): Db {
 					{ id: 'pz-0121-2', purchaseOrderId: 'po02', poLineId: 'po02-2', productId: 'p09', expectedQty: 50, receivedQty: 50, batches: [], serials: [], note: null, checkedAt: at(-1, '10:41') },
 					{ id: 'pz-0121-3', purchaseOrderId: 'po02', poLineId: 'po02-3', productId: 'p17', expectedQty: 24, receivedQty: 24, batches: [], serials: [], note: null, checkedAt: at(-1, '10:55') }
 				],
-				approval: null, allocationOrderId: 'zm-0040', labelsPrintedAt: at(-1, '11:22')
+				approval: null, allocationOrderId: 'zm-0040', labelsPrintedAt: at(-1, '11:22'), mwsSkipped: false, documents: []
 			},
 			{
 				id: 'pz-0122', number: `PZ/${YM()}/0122`, adviceId: 'aw-a1', warehouseId: 'mg01', dockId: 'd1', status: 'DONE',
@@ -327,7 +327,7 @@ export function createSeed(): Db {
 					{ id: 'pz-0122-3', purchaseOrderId: 'po01', poLineId: 'po01-3', productId: 'p03', expectedQty: 48, receivedQty: 48, batches: [{ batch: 'SL2610-02', expiry: day(360), qty: 48 }], serials: [], note: null, checkedAt: at(-1, '08:20') }
 				],
 				approval: { by: 'Piotr Wiśniewski', at: at(-1, '08:38'), note: 'Uszkodzenia zgłoszone dostawcy, reklamacja RK/0091' },
-				allocationOrderId: 'zm-0041', labelsPrintedAt: null
+				allocationOrderId: 'zm-0041', labelsPrintedAt: null, mwsSkipped: false, documents: []
 			},
 			{
 				id: 'pz-0124', number: `PZ/${YM()}/0124`, adviceId: 'aw-b1', warehouseId: 'mg01', dockId: 'd2', status: 'DONE',
@@ -338,7 +338,7 @@ export function createSeed(): Db {
 					{ id: 'pz-0124-3', purchaseOrderId: 'po03', poLineId: 'po03-3', productId: 'p27', expectedQty: 12, receivedQty: 12, batches: [], serials: [], note: null, checkedAt: at(0, '06:50') }
 				],
 				approval: { by: 'Piotr Wiśniewski', at: at(0, '06:54'), note: 'Reszta w drugim aucie – ZZ zostaje otwarte' },
-				allocationOrderId: 'zm-0042', labelsPrintedAt: null
+				allocationOrderId: 'zm-0042', labelsPrintedAt: null, mwsSkipped: false, documents: []
 			},
 			{
 				id: 'pz-0123', number: `PZ/${YM()}/0123`, adviceId: 'aw-b4', warehouseId: 'mg01', dockId: 'd1', status: 'AWAITING_APPROVAL',
@@ -349,7 +349,7 @@ export function createSeed(): Db {
 					{ id: 'pz-0123-3', purchaseOrderId: 'po07', poLineId: 'po07-3', productId: 'p26', expectedQty: 20, receivedQty: 20, batches: [{ batch: 'FG2610-11', expiry: day(540), qty: 20 }], serials: [], note: null, checkedAt: at(0, '07:11') },
 					{ id: 'pz-0123-4', purchaseOrderId: 'po07', poLineId: 'po07-4', productId: 'p29', expectedQty: 12, receivedQty: 12, batches: [{ batch: 'HD2610-04', expiry: day(180), qty: 12 }], serials: [], note: null, checkedAt: at(0, '07:16') }
 				],
-				approval: null, allocationOrderId: null, labelsPrintedAt: null
+				approval: null, allocationOrderId: null, labelsPrintedAt: null, mwsSkipped: false, documents: []
 			},
 			{
 				id: 'pz-0125', number: `PZ/${YM()}/0125`, adviceId: 'aw-b2', warehouseId: 'mg01', dockId: 'd1', status: 'IN_PROGRESS',
@@ -361,7 +361,7 @@ export function createSeed(): Db {
 					{ id: 'pz-0125-4', purchaseOrderId: 'po05', poLineId: 'po05-1', productId: 'p16', expectedQty: 10, receivedQty: 0, batches: [], serials: [], note: null, checkedAt: null },
 					{ id: 'pz-0125-5', purchaseOrderId: 'po05', poLineId: 'po05-2', productId: 'p13', expectedQty: 30, receivedQty: 30, batches: [], serials: [], note: null, checkedAt: at(0, '08:06') }
 				],
-				approval: null, allocationOrderId: null, labelsPrintedAt: null
+				approval: null, allocationOrderId: null, labelsPrintedAt: null, mwsSkipped: false, documents: []
 			},
 			{
 				id: 'pz-0126', number: `PZ/${YM()}/0126`, adviceId: 'aw-b3', warehouseId: 'mg01', dockId: 'd2', status: 'NEW',
@@ -371,7 +371,7 @@ export function createSeed(): Db {
 					{ id: 'pz-0126-2', purchaseOrderId: 'po06', poLineId: 'po06-2', productId: 'p22', expectedQty: 3, receivedQty: 0, batches: [], serials: [], note: null, checkedAt: null },
 					{ id: 'pz-0126-3', purchaseOrderId: 'po06', poLineId: 'po06-3', productId: 'p24', expectedQty: 10, receivedQty: 0, batches: [], serials: [], note: null, checkedAt: null }
 				],
-				approval: null, allocationOrderId: null, labelsPrintedAt: null
+				approval: null, allocationOrderId: null, labelsPrintedAt: null, mwsSkipped: false, documents: []
 			}
 		],
 
