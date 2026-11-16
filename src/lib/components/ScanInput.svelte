@@ -4,7 +4,7 @@
 	import Button from './Button.svelte';
 	import CameraScanner from './CameraScanner.svelte';
 	import ScanLine from '@lucide/svelte/icons/scan-line';
-	import Camera from '@lucide/svelte/icons/camera';
+	import Camera from '@lucide/svelte/icons/video';
 	import { beep } from '$lib/feedback';
 
 	/**
