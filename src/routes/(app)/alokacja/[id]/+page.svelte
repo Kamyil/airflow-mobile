@@ -174,7 +174,7 @@
 			<section class="rounded-3xl bg-surface p-4 ring-1 ring-line">
 				<div class="mb-1.5 flex items-center justify-between gap-2">
 					<p class="text-sm font-bold">Ilość do odłożenia</p>
-					<Button size="sm" onclick={() => (qty = current!.remainingQty)}>Całość ({current.remainingQty})</Button>
+					<Button size="sm" onclick={() => (qty = current!.remainingQty)}>Pozostało ({current.remainingQty})</Button>
 				</div>
 				<QtyStepper bind:value={qty} min={0} max={current.remainingQty} unit={current.product.unit} size="lg" />
 				{#if qty > 0 && qty < current.remainingQty}<p class="mt-1 text-xs text-muted">Częściowo – {current.remainingQty - qty} zostanie na {current.fromLocation}</p>{/if}
