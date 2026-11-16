@@ -127,7 +127,7 @@ export function getReceipt(id: string): Promise<ReceiptDTO> {
 
 function editableReceipt(db: Db, id: string): Receipt {
 	let r = find(db.receipts, id);
-	if (r.status === 'DONE') throw new ApiError('VALIDATION', `Przyjęcie ${r.number} jest już zakończone`);
+	if (r.status === 'DONE') throw new ApiError('VALIDATION', `Rozładunek ${r.number} jest już zakończony`);
 	return r;
 }
 
@@ -182,17 +182,18 @@ export function updateReceiptLine(receiptId: string, lineId: string, input: Rece
 }
 
 /** Rozbieżności bez przełożonego na miejscu – PZ czeka na akceptację */
-export function requestApproval(receiptId: string): Promise<void> {
+export function requestApproval(receiptId: string, generateMws: boolean): Promise<void> {
 	return mutate('Wysłanie PZ do akceptacji', (db) => {
 		let r = editableReceipt(db, receiptId);
 		let dto = receiptDTO(db, r);
 		if (dto.blockers.length) throw new ApiError('VALIDATION', 'Najpierw uzupełnij PZ', dto.blockers);
 		r.status = 'AWAITING_APPROVAL';
+		r.pendingMws = generateMws;
 	});
 }
 
 /**
- * "Zakończ przyjęcie": zamyka PZ, towar trafia na miejsce odstawcze DOKu,
+ * "Zakończ rozładunek": PZ -> Do realizacji, towar trafia na miejsce odstawcze DOKu,
  * a Impuls generuje zlecenie magazynowe MWS (alokacja). Rozbieżności wymagają PIN-u przełożonego.
  */
 export interface CloseReceiptOptions {
@@ -204,12 +205,12 @@ export interface CloseReceiptOptions {
 
 /** Zakończenie przyjęcia: PZ -> Do realizacji (nie zamyka jej), towar na miejsce odstawcze DOKu, opcjonalnie Impuls generuje zlecenie MWS */
 export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions): Promise<{ allocationOrderId: string | null; number: string | null; deferred: number }> {
-	requireOnline(opts.generateMws ? 'generowanie zlecenia magazynowego MWS w Impulsie' : 'zakończenie przyjęcia w Impulsie');
+	requireOnline(opts.generateMws ? 'generowanie zlecenia magazynowego MWS w Impulsie' : 'zakończenie rozładunku w Impulsie');
 	await latency(opts.generateMws ? 1400 : 700, 500); // wywołanie funkcji Impulsa trwa dłużej
-	return mutate(opts.generateMws ? 'Zakończenie przyjęcia' : 'Zakończenie przyjęcia bez zlecenia MWS', (db) => {
+	return mutate(opts.generateMws ? 'Zakończenie rozładunku' : 'Zakończenie rozładunku bez zlecenia MWS', (db) => {
 		let r = editableReceipt(db, receiptId);
 		let dto = receiptDTO(db, r);
-		if (dto.blockers.length) throw new ApiError('VALIDATION', `Nie można zakończyć przyjęcia ${r.number}`, dto.blockers);
+		if (dto.blockers.length) throw new ApiError('VALIDATION', `Nie można zakończyć rozładunku ${r.number}`, dto.blockers);
 
 		if (dto.discrepancies.length) {
 			if (!opts.approval) throw new ApiError('APPROVAL_REQUIRED', 'Rozbieżności wymagają zatwierdzenia przełożonego');
@@ -225,6 +226,7 @@ export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions)
 		for (let part of receivedParts(db, r)) addStock(db, { warehouseId: r.warehouseId, location: dock.stagingLocation, ...part });
 
 		r.status = 'DONE';
+		delete r.pendingMws;
 		r.closedAt = now();
 		r.closedBy = who();
 		if (!opts.generateMws) {
@@ -331,7 +333,7 @@ export function removeReceiptDocument(receiptId: string, documentId: string): Pr
 export function printReceiptLabels(receiptId: string): Promise<GoodsLabelDTO[]> {
 	return mutate('Druk etykiet PZ', (db) => {
 		let r = find(db.receipts, receiptId);
-		if (r.status !== 'DONE') throw new ApiError('VALIDATION', 'Etykiety drukuje się po zakończeniu przyjęcia');
+		if (r.status !== 'DONE') throw new ApiError('VALIDATION', 'Etykiety drukuje się po zakończeniu rozładunku');
 		let supplier = find(db.suppliers, find(db.advices, r.adviceId).supplierId).name;
 		let location = find(db.docks, r.dockId).stagingLocation;
 		r.labelsPrintedAt = now();

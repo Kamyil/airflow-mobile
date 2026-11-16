@@ -491,6 +491,8 @@ export interface Receipt {
 	allocationOrderId: string | null;
 	/** Zamknięta świadomie bez generowania zlecenia MWS */
 	mwsSkipped: boolean;
+	/** Wybór "Generować zlecenie MWS?" zapamiętany przy wysłaniu do akceptacji przełożonego */
+	pendingMws?: boolean;
 	labelsPrintedAt: string | null;
 	/** Zdjęcia dokumentów dostawy (WZ, CMR…) – na poziomie PZ, nie pozycji */
 	documents: ReceiptDocument[];
@@ -720,6 +722,8 @@ export interface ReceiptDTO {
 	 */
 	statusKey: ReceiptStatus | 'PZ_TODO' | 'PZ_DONE';
 	mwsSkipped: boolean;
+	/** Wybór MWS czekający na akceptację przełożonego (null = nie wybrano) */
+	pendingMws: boolean | null;
 	labelsPrintedAt: string | null;
 	documents: ReceiptDocument[];
 	flags: ProductFlags;

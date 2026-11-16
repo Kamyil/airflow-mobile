@@ -36,6 +36,7 @@
 
 	let { data } = $props();
 	let r = $derived(data.receipt);
+	let isSupervisor = $derived(data.operator.role === 'KIEROWNIK');
 	let done = $derived(r.status === 'DONE');
 	let busy = $state(false);
 
@@ -131,8 +132,8 @@
 	async function sendToApproval() {
 		busy = true;
 		try {
-			await requestApproval(r.id);
-			toast.info('PZ czeka na akceptację przełożonego');
+			await requestApproval(r.id, generateMws);
+			toast.info('PZ czeka na akceptację przełożonego', generateMws ? 'Po akceptacji: zlecenie MWS' : 'Po akceptacji: bez zlecenia MWS');
 			approvalOpen = false;
 			closeOpen = false;
 			await invalidateAll();
@@ -155,21 +156,22 @@
 		}
 	}
 
-	// dwa przyciski zamiast przełącznika: z generowaniem zlecenia MWS albo bez
-	function finishWith(mws: boolean) {
-		generateMws = mws;
-		finish();
-	}
-	function approveThen(mws: boolean) {
+	// "Generować zlecenie MWS?" – Generuj / Nie generuj; przy rozbieżnościach dalej PIN przełożonego
+	function choose(mws: boolean) {
 		generateMws = mws;
 		closeOpen = false;
+		if (r.discrepancies.length) approvalOpen = true;
+		else finish();
+	}
+
+	// PZ czeka na akceptację – kierownik zatwierdza z wyborem MWS zapamiętanym przy wysłaniu
+	function approvePending() {
+		generateMws = r.pendingMws ?? true;
 		approvalOpen = true;
 	}
 
 	function startClose() {
-		generateMws = true;
-		if (r.status === 'AWAITING_APPROVAL' && !r.blockers.length) approvalOpen = true;
-		else closeOpen = true;
+		closeOpen = true;
 	}
 
 	// --- etykiety ---
@@ -220,8 +222,10 @@
 	{#if r.status === 'AWAITING_APPROVAL'}
 		<section class="rounded-2xl bg-warn-soft p-4 text-warn">
 			<p class="flex items-center gap-2 font-bold"><Hourglass class="size-5" />Czeka na akceptację przełożonego</p>
-			<p class="mt-1 text-sm">Rozbieżności: {r.discrepancies.length}. Przełożony może zatwierdzić PIN-em na tym urządzeniu.</p>
-			<Button variant="primary" class="mt-3 w-full" onclick={() => (approvalOpen = true)}><ShieldCheck class="size-4" />Zatwierdź PIN-em przełożonego</Button>
+			<p class="mt-1 text-sm">Rozbieżności: {r.discrepancies.length} · {r.pendingMws === false ? 'bez zlecenia MWS' : 'ze zleceniem MWS'}</p>
+			{#if isSupervisor}
+				<Button variant="primary" class="mt-3 w-full" onclick={approvePending}><ShieldCheck class="size-4" />Zatwierdź rozbieżności</Button>
+			{/if}
 		</section>
 	{/if}
 
@@ -230,7 +234,7 @@
 	{#if done}
 		<!-- przyjęcie zakończone: PZ do realizacji / zrealizowana, MWS, alokacja, etykiety -->
 		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
-			<p class="flex items-center gap-2 font-bold text-ok"><CircleCheckBig class="size-5" />Przyjęcie zakończone {fmtDateTime(r.closedAt!)}</p>
+			<p class="flex items-center gap-2 font-bold text-ok"><CircleCheckBig class="size-5" />Rozładunek zakończony {fmtDateTime(r.closedAt!)}</p>
 			<p class="mt-0.5 text-sm text-muted">Przyjął(a): {r.closedBy} · przyjęto {r.totals.received} z {r.totals.expected}</p>
 			<p class="mt-1 text-sm text-muted">{r.statusKey === 'PZ_DONE' ? 'PZ zrealizowana – towar jest na półkach.' : 'PZ do realizacji – zamknie się automatycznie.'}</p>
 			{#if r.approval}
@@ -244,7 +248,7 @@
 			<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
 				<p class="text-xs font-bold tracking-wide text-muted uppercase">Zlecenie magazynowe MWS</p>
 				<p class="mt-1 flex items-center gap-2 font-bold"><Ban class="size-5 text-muted" />Nie wygenerowano</p>
-				<p class="mt-0.5 text-sm text-muted">Przyjęcie zakończone bez zlecenia – towar leży na <b class="text-ink">{r.dock.stagingLocation}</b> i nie trafi do Alokacji.</p>
+				<p class="mt-0.5 text-sm text-muted">Rozładunek zakończony bez zlecenia – towar leży na <b class="text-ink">{r.dock.stagingLocation}</b> i nie trafi do Alokacji.</p>
 				<div class="mt-3 grid grid-cols-2 gap-2">
 					<Button loading={busy} onclick={printLabels}><Printer class="size-4" />Etykiety</Button>
 					<Button variant="task" onclick={generateLater}><ArrowDownToLine class="size-4" />Generuj ZM</Button>
@@ -305,10 +309,10 @@
 	</section>
 </div>
 
-{#if !done}
+{#if !done && r.status !== 'AWAITING_APPROVAL'}
 	<div class="pb-safe fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md border-t border-line bg-surface/95 px-3 pt-3 backdrop-blur">
 		<div class="pb-3">
-			<Button variant={r.blockers.length ? 'primary' : 'ok'} size="lg" class="w-full" onclick={startClose}><Lock class="size-5" />Zakończ przyjęcie</Button>
+			<Button variant={r.blockers.length ? 'primary' : 'ok'} size="lg" class="w-full" onclick={startClose}><Lock class="size-5" />Zakończ rozładunek</Button>
 		</div>
 	</div>
 {/if}
@@ -326,7 +330,7 @@
 {/if}
 
 <!-- podsumowanie przed zamknięciem -->
-<Sheet bind:open={closeOpen} title="Zakończyć przyjęcie?" description="{r.number} · przyjęto {r.totals.received} z {r.totals.expected} szt.">
+<Sheet bind:open={closeOpen} title="Zakończyć rozładunek?" description="{r.number} · przyjęto {r.totals.received} z {r.totals.expected} szt.">
 	{#if r.blockers.length}
 		<p class="mb-2 text-sm font-bold text-bad">Najpierw uzupełnij:</p>
 		<ul class="flex flex-col gap-2">
@@ -356,24 +360,22 @@
 				<p class="mt-1.5 text-xs">Niesprawdzone pozycje nie trafią na tę PZ. Zostają na zamówieniu – awizacja wróci do „Do przyjęcia” i przyjmiesz je kolejną PZ.</p>
 			</div>
 		{/if}
-		<p class="mt-3 text-sm text-muted">Po zamknięciu towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>. Impuls wygeneruje zlecenie magazynowe MWS (alokacja) – chyba że zakończysz bez niego; zlecenie da się wtedy wygenerować później.</p>
+		<p class="mt-3 text-sm text-muted">Towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>, a PZ będzie do realizacji.</p>
+		<div class="mt-4 rounded-2xl bg-bg p-3">
+			<p class="font-extrabold">Generować zlecenie magazynowe MWS?</p>
+			<p class="mt-0.5 text-sm text-muted">Zlecenie alokacji z miejsca odstawczego na półki. Bez niego towar nie trafi do Alokacji – można je wygenerować później.{r.discrepancies.length ? ' Potem PIN przełożonego.' : ''}</p>
+		</div>
 	{/if}
 	{#snippet footer()}
 		{#if !r.blockers.length}
-			{#if r.discrepancies.length}
-				<Button variant="primary" size="lg" onclick={() => approveThen(true)}><ShieldCheck class="size-5" />Potwierdź z przełożonym i generuj MWS</Button>
-				<Button onclick={() => approveThen(false)}><Ban class="size-4" />Zakończ bez generowania MWS</Button>
-				{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Wyślij do akceptacji później</Button>{/if}
-			{:else}
-				<Button variant="ok" size="lg" onclick={() => finishWith(true)}><Lock class="size-5" />Zakończ i generuj zlecenie MWS</Button>
-				<Button onclick={() => finishWith(false)}><Ban class="size-4" />Zakończ bez generowania MWS</Button>
-			{/if}
+			<Button variant="ok" size="lg" onclick={() => choose(true)}><ArrowDownToLine class="size-5" />Generuj MWS</Button>
+			<Button size="lg" onclick={() => choose(false)}><Ban class="size-5" />Nie generuj</Button>
 		{/if}
-		<Button variant="ghost" onclick={() => (closeOpen = false)}>Wróć do przyjmowania</Button>
+		<Button variant="ghost" size="lg" onclick={() => (closeOpen = false)}>Wróć</Button>
 	{/snippet}
 </Sheet>
 
-<SupervisorSheet bind:open={approvalOpen} title="Zatwierdzenie rozbieżności" description="{r.number} · {r.supplier.name}" onConfirm={approve}>
+<SupervisorSheet bind:open={approvalOpen} title="Zatwierdzenie rozbieżności" description="{r.number} · {generateMws ? 'ze zleceniem MWS' : 'bez zlecenia MWS'}" onConfirm={approve}>
 	<ul class="divide-y divide-line rounded-xl border border-line text-sm">
 		{#each r.discrepancies as d (d.lineId)}
 			<li class="flex items-start justify-between gap-3 px-3 py-2">
@@ -382,6 +384,9 @@
 			</li>
 		{/each}
 	</ul>
+	{#snippet extra()}
+		{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Przełożonego nie ma – wyślij do akceptacji</Button>{/if}
+	{/snippet}
 </SupervisorSheet>
 
 <GoodsLabelsSheet bind:open={labelsOpen} {labels} printer={data.context.operator.printer} />
@@ -392,13 +397,13 @@
 		{#if phase === 'generating'}
 			<div class="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
 				<LoaderCircle class="size-14 animate-spin text-task" />
-				<p class="text-xl font-extrabold">Zamykam {r.number}</p>
-				<p class="text-white/70">{generateMws ? 'Impuls generuje zlecenie magazynowe MWS…' : 'Zamykam PZ w Impulsie (bez zlecenia MWS)…'}</p>
+				<p class="text-xl font-extrabold">Kończę rozładunek {r.number}</p>
+				<p class="text-white/70">{generateMws ? 'Impuls generuje zlecenie magazynowe MWS…' : 'Przekazuję PZ do Impulsa (bez zlecenia MWS)…'}</p>
 			</div>
 		{:else if result}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
 				<span class="grid size-20 place-items-center rounded-full bg-ok"><Check class="size-11" strokeWidth={3} /></span>
-				<p class="mt-2 text-2xl font-extrabold">{r.status === 'DONE' && result.number ? 'Zlecenie wygenerowane' : 'Przyjęcie zakończone'}</p>
+				<p class="mt-2 text-2xl font-extrabold">{r.status === 'DONE' && result.number ? 'Zlecenie wygenerowane' : 'Rozładunek zakończony'}</p>
 				<p class="text-white/70">{r.number} – do realizacji. Towar leży na <b class="text-white">{r.dock.stagingLocation}</b>.</p>
 				{#if result.deferred}<p class="text-sm text-white/70">{result.deferred} {result.deferred === 1 ? 'pozycja czeka' : 'pozycje czekają'} na przyjęcie później – awizacja wróciła do „Do przyjęcia”.</p>{/if}
 				<div class="mt-3 rounded-2xl bg-white/10 px-5 py-3">

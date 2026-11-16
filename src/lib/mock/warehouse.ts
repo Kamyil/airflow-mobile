@@ -177,6 +177,7 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 			: null,
 		statusKey: r.status !== 'DONE' ? r.status : alloc && allocationStatus(alloc) === 'DONE' ? 'PZ_DONE' : 'PZ_TODO',
 		mwsSkipped: r.mwsSkipped,
+		pendingMws: r.pendingMws ?? null,
 		labelsPrintedAt: r.labelsPrintedAt,
 		documents: r.documents,
 		flags: flagsOf(lines.map((l) => l.product))
