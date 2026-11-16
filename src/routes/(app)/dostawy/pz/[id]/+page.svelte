@@ -1,26 +1,27 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { ApiError, closeReceipt, generateMwsOrder, mockScanner, printReceiptLabels, requestApproval, scanReceiptProduct, updateReceiptLine, verifySupervisorPin, type ReceiptLineInput } from '$lib/api';
+	import { ApiError, closeReceipt, generateMwsOrder, printReceiptLabels, requestApproval, setReceiptCarriers, verifySupervisorPin } from '$lib/api';
 	import type { GoodsLabelDTO, ReceiptLineDTO } from '$lib/types';
 	import { toast } from '$lib/toast.svelte';
-	import { fmtDate, fmtDateTime, fmtDiff, fmtTime } from '$lib/format';
+	import { fmtDate, fmtDateTime, fmtDiff, fmtTime, plural } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import Badge from '$lib/components/Badge.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
-	import ScanInput from '$lib/components/ScanInput.svelte';
+	import QtyStepper from '$lib/components/QtyStepper.svelte';
 	import StatusBadge, { STATUS } from '$lib/components/StatusBadge.svelte';
 	import ProductFlags from '$lib/components/ProductFlags.svelte';
 	import Progress from '$lib/components/Progress.svelte';
 	import SupervisorSheet from '$lib/components/SupervisorSheet.svelte';
 	import GoodsLabelsSheet from '$lib/components/GoodsLabelsSheet.svelte';
-	import ReceiptLineSheet from './ReceiptLineSheet.svelte';
 	import ReceiptDocuments from './ReceiptDocuments.svelte';
 	import BatchCorrectionSheet from './BatchCorrectionSheet.svelte';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Truck from '@lucide/svelte/icons/truck';
 	import Check from '@lucide/svelte/icons/check';
-	import Circle from '@lucide/svelte/icons/circle';
+	import Layers from '@lucide/svelte/icons/layers';
+	import FileText from '@lucide/svelte/icons/file-text';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
@@ -31,7 +32,6 @@
 	import Printer from '@lucide/svelte/icons/printer';
 	import Lock from '@lucide/svelte/icons/lock';
 	import Send from '@lucide/svelte/icons/send';
-	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Ban from '@lucide/svelte/icons/ban';
 
 	let { data } = $props();
@@ -40,67 +40,39 @@
 	let done = $derived(r.status === 'DONE');
 	let busy = $state(false);
 
-	// --- pozycja ---
-	let editing = $state<ReceiptLineDTO | null>(null);
-	let lineOpen = $state(false);
-
-	// --- korekta serii na zrealizowanej PZ ---
+	// --- korekta serii (tylko PZ po rozładunku, pozycje z seriami) ---
 	let correctingId = $state<string | null>(null);
 	let correctOpen = $state(false);
 	let correcting = $derived(r.lines.find((l) => l.id === correctingId) ?? null);
-	let unchecked = $derived(r.lines.filter((l) => !l.checked));
 
 	function openLine(l: ReceiptLineDTO) {
-		if (done) {
-			if (l.batches.length) {
-				correctingId = l.id;
-				correctOpen = true;
-			}
-			return;
-		}
-		editing = l;
-		lineOpen = true;
+		if (!done || !l.batches.length) return;
+		correctingId = l.id;
+		correctOpen = true;
 	}
 
-	async function onScan(code: string): Promise<string | null> {
-		try {
-			let { lineId } = await scanReceiptProduct(r.id, code);
-			openLine(r.lines.find((l) => l.id === lineId)!);
-			return null;
-		} catch (e) {
-			if (e instanceof ApiError) return e.message;
-			throw e;
-		}
-	}
+	// --- rozładunek: liczba przyjętych nośników (jedyne dane od magazyniera) ---
+	let carriers = $state(untrack(() => r.carriers.received ?? r.carriers.advised ?? 1));
+	let carriersDirty = $derived(carriers !== r.carriers.received);
 
-	async function saveLine(input: ReceiptLineInput): Promise<string | null> {
-		if (!editing) return null;
+	async function saveCarriers() {
 		busy = true;
 		try {
-			await updateReceiptLine(r.id, editing.id, input);
-			toast.ok(`${editing.product.sku}: przyjęto ${input.receivedQty} ${editing.product.unit}`);
-			lineOpen = false;
+			await setReceiptCarriers(r.id, carriers);
+			toast.ok(`Zapisano: ${carriers} ${plural(carriers, 'nośnik', 'nośniki', 'nośników')}`);
 			await invalidateAll();
-			return null;
 		} catch (e) {
-			if (e instanceof ApiError) return [e.message, ...e.details].join(' · ');
 			toast.error(e);
-			return null;
 		} finally {
 			busy = false;
 		}
 	}
 
-	let hints = $derived([
-		...r.lines.filter((l) => !l.checked).slice(0, 3).map((l) => ({ code: l.product.ean, label: l.product.sku })),
-		{ code: mockScanner.foreignEan, label: 'obcy EAN' }
-	]);
-
 	// --- zamknięcie ---
 	let closeOpen = $state(false);
 	let approvalOpen = $state(false);
 	let phase = $state<'idle' | 'generating' | 'success'>('idle');
-	let result = $state<{ allocationOrderId: string | null; number: string | null; deferred?: number } | null>(null);
+	let result = $state<{ allocationOrderId: string | null; number: string | null } | null>(null);
 	/** Czy po zamknięciu wywołać w Impulsie "generuj zlecenie magazynowe MWS" */
 	let generateMws = $state(true);
 
@@ -156,11 +128,11 @@
 		}
 	}
 
-	// "Generować zlecenie MWS?" – Generuj / Nie generuj; przy rozbieżnościach dalej PIN przełożonego
+	// Zamknij z generowaniem MWS / bez; przy różnicy nośników dalej PIN przełożonego
 	function choose(mws: boolean) {
 		generateMws = mws;
 		closeOpen = false;
-		if (r.discrepancies.length) approvalOpen = true;
+		if (r.needsApproval) approvalOpen = true;
 		else finish();
 	}
 
@@ -171,6 +143,7 @@
 	}
 
 	function startClose() {
+		if (carriersDirty && r.carriers.received !== null) carriers = r.carriers.received;
 		closeOpen = true;
 	}
 
@@ -196,7 +169,6 @@
 		await goto(to, { invalidateAll: true });
 	}
 
-	const lineState = (l: ReceiptLineDTO) => (!l.checked ? 'todo' : l.trackingMissing ? 'bad' : l.diff !== 0 ? 'warn' : 'ok');
 </script>
 
 <PageHeader title={r.number} titleNote={STATUS[r.statusKey]?.[0]} subtitle={r.supplier.name} back={done ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
@@ -214,15 +186,12 @@
 			<div class="col-span-2"><dt class="text-xs text-muted">Zamówienia zakupu</dt><dd class="font-mono font-semibold">{r.purchaseOrders.map((p) => p.number).join(', ')}</dd></div>
 			<div class="col-span-2"><dt class="text-xs text-muted">Auto</dt><dd class="flex items-center gap-1.5 font-semibold"><Truck class="size-4 text-muted" />{r.advice.vehicle.plate} · {r.advice.vehicle.driver}</dd></div>
 		</dl>
-		{#if !done}
-			<div class="mt-3"><Progress value={r.progress.linesChecked} max={r.progress.lines} label="{r.progress.linesChecked}/{r.progress.lines} poz. sprawdzonych" /></div>
-		{/if}
 	</section>
 
 	{#if r.status === 'AWAITING_APPROVAL'}
 		<section class="rounded-2xl bg-warn-soft p-4 text-warn">
 			<p class="flex items-center gap-2 font-bold"><Hourglass class="size-5" />Czeka na akceptację przełożonego</p>
-			<p class="mt-1 text-sm">Rozbieżności: {r.discrepancies.length} · {r.pendingMws === false ? 'bez zlecenia MWS' : 'ze zleceniem MWS'}</p>
+			<p class="mt-1 text-sm">Nośniki: przyjęto {r.carriers.received}, awizowano {r.carriers.advised} · {r.pendingMws === false ? 'bez zlecenia MWS' : 'ze zleceniem MWS'}</p>
 			{#if isSupervisor}
 				<Button variant="primary" class="mt-3 w-full" onclick={approvePending}><ShieldCheck class="size-4" />Zatwierdź rozbieżności</Button>
 			{/if}
@@ -235,7 +204,7 @@
 		<!-- przyjęcie zakończone: PZ do realizacji / zrealizowana, MWS, alokacja, etykiety -->
 		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
 			<p class="flex items-center gap-2 font-bold text-ok"><CircleCheckBig class="size-5" />Rozładunek zakończony {fmtDateTime(r.closedAt!)}</p>
-			<p class="mt-0.5 text-sm text-muted">Przyjął(a): {r.closedBy} · przyjęto {r.totals.received} z {r.totals.expected}</p>
+			<p class="mt-0.5 text-sm text-muted">Przyjął(a): {r.closedBy}{r.carriers.received !== null ? ` · nośniki: ${r.carriers.received}` : ''}</p>
 			<p class="mt-1 text-sm text-muted">{r.statusKey === 'PZ_DONE' ? 'PZ zrealizowana – towar jest na półkach.' : 'PZ do realizacji – zamknie się automatycznie.'}</p>
 			{#if r.approval}
 				<div class="mt-3 rounded-xl bg-info-soft p-3 text-sm text-info">
@@ -270,8 +239,21 @@
 		{/if}
 	{:else}
 		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
-			<p class="mb-2 text-sm font-bold">Zeskanuj produkt z dostawy</p>
-			<ScanInput placeholder="EAN / indeks produktu" {onScan} {hints} autofocus={false} />
+			<div class="flex items-center justify-between gap-2">
+				<p class="flex items-center gap-2 text-sm font-bold"><Layers class="size-4 text-muted" />Przyjęte nośniki</p>
+				<span class="text-xs text-muted">{r.carriers.advised !== null ? `awizowano: ${r.carriers.advised}` : 'awizacja bez liczby palet'}</span>
+			</div>
+			<div class="mt-3 flex gap-2">
+				<QtyStepper bind:value={carriers} min={0} max={999} unit="szt." size="lg" class="flex-1" />
+				<Button variant="primary" size="lg" class="h-14" disabled={!carriersDirty} loading={busy} onclick={saveCarriers}>Zapisz</Button>
+			</div>
+			{#if r.carriers.received === null}
+				<p class="mt-2 text-xs text-muted">Policz palety / nośniki zdjęte z auta i zapisz.</p>
+			{:else if r.carriers.diff}
+				<p class="mt-2 flex gap-2 rounded-xl bg-warn-soft p-2.5 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica {fmtDiff(r.carriers.diff)} względem awizacji – zakończenie wymaga potwierdzenia przełożonego.</p>
+			{:else if !carriersDirty}
+				<p class="mt-2 flex items-center gap-1.5 text-xs font-bold text-ok"><Check class="size-4" />Zapisano{r.carriers.advised !== null ? ' – zgodne z awizacją' : ''}</p>
+			{/if}
 		</section>
 	{/if}
 
@@ -280,29 +262,24 @@
 		<h2 class="mb-2 px-1 text-xs font-extrabold tracking-wide text-muted uppercase">Pozycje ({r.lines.length})</h2>
 		<ul class="overflow-hidden rounded-2xl bg-surface ring-1 ring-line">
 			{#each r.lines as l (l.id)}
-				{@const st = lineState(l)}
+				{@const editable = done && l.batches.length > 0}
 				<li class="border-t border-line first:border-0">
-					<button type="button" class="flex w-full items-start gap-3 p-3 text-left {!done || l.batches.length ? 'active:bg-bg' : ''}" onclick={() => openLine(l)}>
-						<span class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full {st === 'ok' ? 'bg-ok text-white' : st === 'warn' ? 'bg-warn text-white' : st === 'bad' ? 'bg-bad text-white' : 'bg-bg text-muted'}">
-							{#if st === 'ok'}<Check class="size-4" strokeWidth={3} />{:else if st === 'warn'}<TriangleAlert class="size-4" />{:else if st === 'bad'}<CircleAlert class="size-4" />{:else}<Circle class="size-3" />{/if}
-						</span>
+					<svelte:element this={editable ? 'button' : 'div'} type={editable ? 'button' : undefined} role={editable ? undefined : 'listitem'} class="flex w-full items-start gap-3 p-3 text-left {editable ? 'active:bg-bg' : ''}" onclick={editable ? () => openLine(l) : undefined}>
 						<span class="min-w-0 flex-1">
 							<span class="block truncate font-semibold">{l.product.name}</span>
 							<span class="block font-mono text-xs text-muted">{l.product.sku} · {l.purchaseOrderNumber}</span>
 							<span class="mt-1 flex flex-wrap gap-1"><ProductFlags product={l.product} size="sm" /></span>
 							{#if l.batches.length}<span class="mt-1 block text-xs text-info">Seria: {l.batches.map((b) => `${b.batch} (${b.qty})`).join(', ')}</span>{/if}
 							{#if l.batchCorrections?.length}<span class="mt-0.5 block text-xs text-muted">Poprawiono serię ({l.batchCorrections.length}×), ostatnio {l.batchCorrections.at(-1)!.by}</span>{/if}
-							{#if done && l.batches.length}<span class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-ink-2 underline underline-offset-2"><Pencil class="size-3" />Popraw serię</span>{/if}
+							{#if editable}<span class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-ink-2 underline underline-offset-2"><Pencil class="size-3" />Popraw serię</span>{/if}
 							{#if l.serials.length}<span class="mt-1 block text-xs text-ink-2">SN: {l.serials.join(', ')}</span>{/if}
-							{#if l.trackingMissing}<span class="mt-1 block text-xs font-bold text-bad">{l.trackingMissing}</span>{/if}
 							{#if l.note}<span class="mt-1 block text-xs text-warn">„{l.note}”</span>{/if}
 						</span>
-						<span class="text-right">
-							<span class="block font-mono font-extrabold whitespace-nowrap">{l.checked ? l.receivedQty : '–'}<span class="text-muted">/{l.expectedQty}</span></span>
-							{#if l.checked && l.diff !== 0}<span class="block text-xs font-bold text-warn">{fmtDiff(l.diff)}</span>{/if}
+						<span class="text-right font-mono font-extrabold whitespace-nowrap">
+							{#if done && l.diff !== 0}{l.receivedQty}<span class="text-muted">/{l.expectedQty}</span><span class="block text-xs font-bold text-warn">{fmtDiff(l.diff)}</span>
+							{:else}{l.expectedQty} <span class="text-sm font-normal text-muted">{l.product.unit}</span>{/if}
 						</span>
-						{#if !done}<ChevronRight class="mt-1 size-4 shrink-0 text-muted" />{/if}
-					</button>
+					</svelte:element>
 				</li>
 			{/each}
 		</ul>
@@ -323,67 +300,36 @@
 	{/key}
 {/if}
 
-{#if editing}
-	{#key editing.id}
-		<ReceiptLineSheet bind:open={lineOpen} line={editing} {busy} onSave={saveLine} />
-	{/key}
-{/if}
 
 <!-- podsumowanie przed zamknięciem -->
-<Sheet bind:open={closeOpen} title="Zakończyć rozładunek?" description="{r.number} · przyjęto {r.totals.received} z {r.totals.expected} szt.">
+<Sheet bind:open={closeOpen} title="Zakończyć rozładunek?" description="{r.number} · {r.supplier.name}">
 	{#if r.blockers.length}
 		<p class="mb-2 text-sm font-bold text-bad">Najpierw uzupełnij:</p>
 		<ul class="flex flex-col gap-2">
 			{#each r.blockers as b (b)}<li class="flex gap-3 rounded-xl bg-bad-soft p-3 text-sm font-semibold text-bad"><CircleAlert class="size-5 shrink-0" />{b}</li>{/each}
 		</ul>
 	{:else}
-		{#if r.discrepancies.length}
-			<p class="mb-2 text-sm font-bold text-warn">Rozbieżności ({r.discrepancies.length}) – wymagają potwierdzenia przełożonego:</p>
-			<ul class="divide-y divide-line rounded-xl border border-warn/40 text-sm">
-				{#each r.discrepancies as d (d.lineId)}
-					<li class="flex items-start justify-between gap-3 px-3 py-2">
-						<span class="min-w-0"><b class="block truncate">{d.product.name}</b>{#if d.note}<span class="text-xs text-muted">„{d.note}”</span>{/if}</span>
-						<span class="font-mono font-bold whitespace-nowrap text-warn">{d.received}/{d.expected} ({fmtDiff(d.diff)})</span>
-					</li>
-				{/each}
-			</ul>
-			<p class="mt-3 text-xs text-muted">Brakujące ilości zostają na zamówieniu zakupu – można je przyjąć kolejną PZ (np. z drugiego auta).</p>
-		{:else if !unchecked.length}
-			<p class="flex items-center gap-2 rounded-xl bg-ok-soft p-3 text-sm font-semibold text-ok"><Check class="size-5" />Wszystkie pozycje zgodne z zamówieniem</p>
+		<dl class="divide-y divide-line rounded-xl border border-line text-sm">
+			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><Layers class="size-4" />Nośniki przyjęte</dt><dd class="font-bold">{r.carriers.received}{r.carriers.advised !== null ? ` / awizowano ${r.carriers.advised}` : ''}</dd></div>
+			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><FileText class="size-4" />Dokumenty</dt><dd class="font-bold {r.documents.length ? '' : 'text-warn'}">{r.documents.length ? `${r.documents.length} zdj.` : 'brak zdjęć'}</dd></div>
+			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Pozycje z dokumentu</dt><dd class="font-bold">{r.lines.length}</dd></div>
+		</dl>
+		{#if r.needsApproval}
+			<p class="mt-3 flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica nośników {fmtDiff(r.carriers.diff ?? 0)} – po wyborze potrzebny PIN przełożonego.</p>
 		{/if}
-		{#if unchecked.length}
-			<div class="mt-3 rounded-xl bg-info-soft p-3 text-sm text-info">
-				<p class="flex items-center gap-2 font-bold"><Hourglass class="size-4" />Do przyjęcia później ({unchecked.length})</p>
-				<ul class="mt-1 flex flex-col gap-0.5">
-					{#each unchecked as l (l.id)}<li class="flex justify-between gap-3"><span class="truncate">{l.product.name}</span><span class="font-mono font-bold whitespace-nowrap">{l.expectedQty} {l.product.unit}</span></li>{/each}
-				</ul>
-				<p class="mt-1.5 text-xs">Niesprawdzone pozycje nie trafią na tę PZ. Zostają na zamówieniu – awizacja wróci do „Do przyjęcia” i przyjmiesz je kolejną PZ.</p>
-			</div>
-		{/if}
-		<p class="mt-3 text-sm text-muted">Towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>, a PZ będzie do realizacji.</p>
-		<div class="mt-4 rounded-2xl bg-bg p-3">
-			<p class="font-extrabold">Generować zlecenie magazynowe MWS?</p>
-			<p class="mt-0.5 text-sm text-muted">Zlecenie alokacji z miejsca odstawczego na półki. Bez niego towar nie trafi do Alokacji – można je wygenerować później.{r.discrepancies.length ? ' Potem PIN przełożonego.' : ''}</p>
-		</div>
+		<p class="mt-3 text-sm text-muted">Towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>, a PZ będzie do realizacji. Zlecenie MWS (alokacja) można też wygenerować później.</p>
 	{/if}
 	{#snippet footer()}
 		{#if !r.blockers.length}
-			<Button variant="ok" size="lg" onclick={() => choose(true)}><ArrowDownToLine class="size-5" />Generuj MWS</Button>
-			<Button size="lg" onclick={() => choose(false)}><Ban class="size-5" />Nie generuj</Button>
+			<Button variant="ok" size="lg" onclick={() => choose(true)}><ArrowDownToLine class="size-5" />Zamknij z generowaniem MWS</Button>
+			<Button size="lg" onclick={() => choose(false)}><Ban class="size-5" />Zamknij bez generowania MWS</Button>
 		{/if}
 		<Button variant="ghost" size="lg" onclick={() => (closeOpen = false)}>Wróć</Button>
 	{/snippet}
 </Sheet>
 
-<SupervisorSheet bind:open={approvalOpen} title="Zatwierdzenie rozbieżności" description="{r.number} · {generateMws ? 'ze zleceniem MWS' : 'bez zlecenia MWS'}" onConfirm={approve}>
-	<ul class="divide-y divide-line rounded-xl border border-line text-sm">
-		{#each r.discrepancies as d (d.lineId)}
-			<li class="flex items-start justify-between gap-3 px-3 py-2">
-				<span class="min-w-0"><b class="block truncate">{d.product.name}</b>{#if d.note}<span class="text-xs text-muted">„{d.note}”</span>{/if}</span>
-				<span class="font-mono font-bold whitespace-nowrap text-warn">{fmtDiff(d.diff)}</span>
-			</li>
-		{/each}
-	</ul>
+<SupervisorSheet bind:open={approvalOpen} title="Zatwierdzenie różnicy nośników" description="{r.number} · {generateMws ? 'ze zleceniem MWS' : 'bez zlecenia MWS'}" onConfirm={approve}>
+	<p class="rounded-xl border border-line px-3 py-2.5 text-sm">Przyjęto <b>{r.carriers.received}</b> {plural(r.carriers.received ?? 0, 'nośnik', 'nośniki', 'nośników')}, awizowano <b>{r.carriers.advised}</b> <span class="font-mono font-bold text-warn">({fmtDiff(r.carriers.diff ?? 0)})</span></p>
 	{#snippet extra()}
 		{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Przełożonego nie ma – wyślij do akceptacji</Button>{/if}
 	{/snippet}
@@ -405,7 +351,6 @@
 				<span class="grid size-20 place-items-center rounded-full bg-ok"><Check class="size-11" strokeWidth={3} /></span>
 				<p class="mt-2 text-2xl font-extrabold">{r.status === 'DONE' && result.number ? 'Zlecenie wygenerowane' : 'Rozładunek zakończony'}</p>
 				<p class="text-white/70">{r.number} – do realizacji. Towar leży na <b class="text-white">{r.dock.stagingLocation}</b>.</p>
-				{#if result.deferred}<p class="text-sm text-white/70">{result.deferred} {result.deferred === 1 ? 'pozycja czeka' : 'pozycje czekają'} na przyjęcie później – awizacja wróciła do „Do przyjęcia”.</p>{/if}
 				<div class="mt-3 rounded-2xl bg-white/10 px-5 py-3">
 					<p class="text-xs tracking-wide text-white/60 uppercase">Zlecenie magazynowe MWS</p>
 					{#if result.number}

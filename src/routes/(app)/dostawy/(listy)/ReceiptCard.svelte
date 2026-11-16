@@ -8,12 +8,12 @@
 	import Badge from '$lib/components/Badge.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import ProductFlags from '$lib/components/ProductFlags.svelte';
-	import Progress from '$lib/components/Progress.svelte';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import Tag from '@lucide/svelte/icons/tag';
+	import Layers from '@lucide/svelte/icons/layers';
+	import CircleDashed from '@lucide/svelte/icons/circle-dashed';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import Ban from '@lucide/svelte/icons/ban';
 
@@ -51,22 +51,21 @@
 		<ProductFlags flags={r.flags} size="sm" />
 	</div>
 	{#if r.status !== 'DONE'}
-		<div class="mt-3"><Progress value={r.progress.linesChecked} max={r.progress.lines} label="{r.progress.linesChecked}/{r.progress.lines} poz." /></div>
+		<p class="mt-3 flex items-center gap-1.5 text-sm {r.carriers.received === null ? 'text-muted' : r.carriers.diff ? 'font-bold text-warn' : 'font-bold'}"><Layers class="size-4" />{r.carriers.received === null ? 'Nośniki: nie podano' : `Nośniki: ${r.carriers.received}`}{r.carriers.advised !== null ? ` / awizowano ${r.carriers.advised}` : ''}</p>
 		<p class="mt-2 text-xs text-muted">Utworzył(a) {r.createdBy} · {fmtDateTime(r.createdAt)}</p>
 	{:else}
-		<p class="mt-2 text-xs text-muted">Przyjął(a) {r.closedBy} · {fmtDateTime(r.closedAt!)} · {r.totals.received} szt.</p>
+		<p class="mt-2 text-xs text-muted">Przyjął(a) {r.closedBy} · {fmtDateTime(r.closedAt!)}{r.carriers.received !== null ? ` · nośniki: ${r.carriers.received}` : ''}</p>
 	{/if}
-	{#if r.discrepancies.length || r.allocation || r.mwsSkipped || r.labelsPrintedAt || r.documents.length}
-		<div class="mt-2 flex flex-wrap gap-1.5">
-			{#if r.discrepancies.length}
-				{#if r.approval}<Badge tone="info"><ShieldCheck />Rozbieżności zatwierdzone</Badge>{:else}<Badge tone="warn"><TriangleAlert />Rozbieżności: {r.discrepancies.length}</Badge>{/if}
-			{/if}
-			{#if r.allocation}<Badge tone={r.allocation.status === 'DONE' ? 'ok' : 'task'}><ArrowDownToLine />{r.allocation.number} · {ALLOC[r.allocation.status]}</Badge>{/if}
-			{#if r.mwsSkipped}<Badge><Ban />Bez zlecenia MWS</Badge>{/if}
-			{#if r.documents.length}<Badge><FileText />Dokumenty: {r.documents.length}</Badge>{/if}
-			{#if r.labelsPrintedAt}<Badge><Tag />Etykiety</Badge>{/if}
-		</div>
-	{/if}
+	<div class="mt-2 flex flex-wrap gap-1.5">
+		<!-- zlecenie MWS: zawsze widoczne, czy jest wygenerowane -->
+		{#if r.allocation}<Badge tone={r.allocation.status === 'DONE' ? 'ok' : 'task'}><ArrowDownToLine />MWS {r.allocation.number} · {ALLOC[r.allocation.status]}</Badge>
+		{:else if r.mwsSkipped}<Badge tone="warn"><Ban />Bez zlecenia MWS</Badge>
+		{:else if r.status === 'AWAITING_APPROVAL' && r.pendingMws !== null}<Badge><CircleDashed />{r.pendingMws ? 'MWS po akceptacji' : 'Bez MWS (po akceptacji)'}</Badge>
+		{:else}<Badge><CircleDashed />MWS: nie wygenerowano</Badge>{/if}
+		{#if r.approval}<Badge tone="info"><ShieldCheck />Rozbieżności zatwierdzone</Badge>{/if}
+		{#if r.documents.length}<Badge><FileText />Dokumenty: {r.documents.length}</Badge>{/if}
+		{#if r.labelsPrintedAt}<Badge><Tag />Etykiety</Badge>{/if}
+	</div>
 </a>
 {#if r.mwsSkipped}
 	<div class="border-t border-line bg-bg/60 p-2">

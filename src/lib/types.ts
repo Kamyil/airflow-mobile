@@ -491,6 +491,8 @@ export interface Receipt {
 	allocationOrderId: string | null;
 	/** Zamknięta świadomie bez generowania zlecenia MWS */
 	mwsSkipped: boolean;
+	/** Liczba nośników (palet) przyjętych przy rozładunku – jedyne, co podaje magazynier */
+	carriers?: number | null;
 	/** Wybór "Generować zlecenie MWS?" zapamiętany przy wysłaniu do akceptacji przełożonego */
 	pendingMws?: boolean;
 	labelsPrintedAt: string | null;
@@ -721,6 +723,10 @@ export interface ReceiptDTO {
 	 * PZ zamyka się sama (w makiecie: gdy towar ze zlecenia MWS jest na półkach).
 	 */
 	statusKey: ReceiptStatus | 'PZ_TODO' | 'PZ_DONE';
+	/** Nośniki: awizowane (jeśli dostawca podał) vs przyjęte przy rozładunku */
+	carriers: { advised: number | null; received: number | null; diff: number | null };
+	/** Różnica nośników względem awizacji – zakończenie wymaga potwierdzenia przełożonego */
+	needsApproval: boolean;
 	mwsSkipped: boolean;
 	/** Wybór MWS czekający na akceptację przełożonego (null = nie wybrano) */
 	pendingMws: boolean | null;

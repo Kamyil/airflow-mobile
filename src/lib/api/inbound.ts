@@ -1,6 +1,6 @@
 import { find } from '$lib/mock/domain';
 import { addStock, adviceDTO, openReceiptOf, receiptDTO, receivedOnPoLine, suggestLocation } from '$lib/mock/warehouse';
-import type { AdviceDetailDTO, AdviceDTO, BatchEntry, Db, GoodsLabelDTO, Receipt, ReceiptDocumentKind, ReceiptDTO } from '$lib/types';
+import type { AdviceDetailDTO, AdviceDTO, Db, GoodsLabelDTO, Receipt, ReceiptDocumentKind, ReceiptDTO } from '$lib/types';
 import { ApiError, latency, mutate, now, query, requireOnline, who } from './core';
 import { assertSupervisor } from './session';
 
@@ -131,53 +131,13 @@ function editableReceipt(db: Db, id: string): Receipt {
 	return r;
 }
 
-/** Skan EAN / indeksu na PZ – zwraca pozycję, której dotyczy */
-export function scanReceiptProduct(receiptId: string, code: string): Promise<{ lineId: string }> {
-	return query((db) => {
-		let r = find(db.receipts, receiptId);
-		let c = code.trim().toUpperCase();
-		let lines = r.lines.filter((l) => {
-			let p = find(db.products, l.productId);
-			return p.ean === c || p.sku.toUpperCase() === c;
-		});
-		if (!lines.length) throw new ApiError('VALIDATION', `Produkt ${c} nie występuje na tej dostawie`, ['Sprawdź, czy towar nie przyjechał omyłkowo – odłóż go na bok i zgłoś przełożonemu.']);
-		// gdy ten sam produkt jest na kilku ZZ – pierwsza niesprawdzona pozycja
-		return { lineId: (lines.find((l) => !l.checkedAt) ?? lines[0]).id };
-	});
-}
-
-export interface ReceiptLineInput {
-	receivedQty: number;
-	batches: BatchEntry[];
-	serials: string[];
-	note: string | null;
-}
-
-export function updateReceiptLine(receiptId: string, lineId: string, input: ReceiptLineInput): Promise<void> {
-	return mutate('Przyjęcie pozycji PZ', (db) => {
+/** Rozładunek: liczba przyjętych nośników (palet) – jedyne dane wprowadzane przez magazyniera */
+export function setReceiptCarriers(receiptId: string, carriers: number): Promise<void> {
+	return mutate('Liczba nośników na PZ', (db) => {
 		let r = editableReceipt(db, receiptId);
-		let line = r.lines.find((l) => l.id === lineId);
-		if (!line) throw new ApiError('NOT_FOUND', 'Nie znaleziono pozycji');
-		let p = find(db.products, line.productId);
-		let errors: string[] = [];
-
-		if (!(input.receivedQty >= 0) || !Number.isInteger(input.receivedQty)) errors.push('Ilość musi być liczbą całkowitą ≥ 0');
-		let batches = p.tracking === 'BATCH' ? input.batches.filter((b) => b.qty > 0) : [];
-		for (let b of batches) if (!b.batch.trim()) errors.push('Podaj numer serii dla każdej partii');
-		let serials = p.tracking === 'SERIAL' ? input.serials.map((s) => s.trim().toUpperCase()).filter(Boolean) : [];
-		if (new Set(serials).size !== serials.length) errors.push('Numery seryjne nie mogą się powtarzać');
-		let elsewhere = new Set(db.stock.flatMap((s) => (s.productId === p.id ? s.serials : [])));
-		let dup = serials.filter((s) => elsewhere.has(s));
-		if (dup.length) errors.push(`Numer seryjny jest już na stanie: ${dup.join(', ')}`);
-		if (errors.length) throw new ApiError('VALIDATION', 'Popraw dane pozycji', errors);
-
-		line.receivedQty = input.receivedQty;
-		line.batches = batches.map((b) => ({ ...b, batch: b.batch.trim().toUpperCase() }));
-		line.serials = serials;
-		line.note = input.note?.trim() || null;
-		line.checkedAt = now();
-		r.status = 'IN_PROGRESS';
-		r.approval = null;
+		if (!Number.isInteger(carriers) || carriers < 0) throw new ApiError('VALIDATION', 'Liczba nośników musi być liczbą całkowitą ≥ 0');
+		r.carriers = carriers;
+		if (r.status === 'NEW') r.status = 'IN_PROGRESS';
 	});
 }
 
@@ -204,7 +164,7 @@ export interface CloseReceiptOptions {
 }
 
 /** Zakończenie przyjęcia: PZ -> Do realizacji (nie zamyka jej), towar na miejsce odstawcze DOKu, opcjonalnie Impuls generuje zlecenie MWS */
-export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions): Promise<{ allocationOrderId: string | null; number: string | null; deferred: number }> {
+export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions): Promise<{ allocationOrderId: string | null; number: string | null }> {
 	requireOnline(opts.generateMws ? 'generowanie zlecenia magazynowego MWS w Impulsie' : 'zakończenie rozładunku w Impulsie');
 	await latency(opts.generateMws ? 1400 : 700, 500); // wywołanie funkcji Impulsa trwa dłużej
 	return mutate(opts.generateMws ? 'Zakończenie rozładunku' : 'Zakończenie rozładunku bez zlecenia MWS', (db) => {
@@ -212,15 +172,17 @@ export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions)
 		let dto = receiptDTO(db, r);
 		if (dto.blockers.length) throw new ApiError('VALIDATION', `Nie można zakończyć rozładunku ${r.number}`, dto.blockers);
 
-		if (dto.discrepancies.length) {
-			if (!opts.approval) throw new ApiError('APPROVAL_REQUIRED', 'Rozbieżności wymagają zatwierdzenia przełożonego');
+		if (dto.needsApproval) {
+			if (!opts.approval) throw new ApiError('APPROVAL_REQUIRED', 'Różnica nośników wymaga zatwierdzenia przełożonego');
 			let supervisor = assertSupervisor(db, opts.approval.pin);
 			r.approval = { by: supervisor.name, at: now(), note: opts.approval.note.trim() };
 		}
 
-		// niesprawdzone pozycje wypadają z PZ – zostają na ZZ, awizacja wraca do "Do przyjęcia"
-		let deferred = r.lines.filter((l) => !l.checkedAt).length;
-		r.lines = r.lines.filter((l) => l.checkedAt);
+		// bez wprowadzania produktów: PZ przyjmuje ilości z dokumentu (weryfikacja ilości poza rozładunkiem)
+		for (let l of r.lines) {
+			l.receivedQty = l.expectedQty;
+			l.checkedAt ??= now();
+		}
 
 		let dock = find(db.docks, r.dockId);
 		for (let part of receivedParts(db, r)) addStock(db, { warehouseId: r.warehouseId, location: dock.stagingLocation, ...part });
@@ -231,9 +193,9 @@ export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions)
 		r.closedBy = who();
 		if (!opts.generateMws) {
 			r.mwsSkipped = true;
-			return { allocationOrderId: null, number: null, deferred };
+			return { allocationOrderId: null, number: null };
 		}
-		return { ...createAllocationOrder(db, r), deferred };
+		return createAllocationOrder(db, r);
 	});
 }
 

@@ -138,11 +138,15 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 	let advice = find(db.advices, r.adviceId);
 	let lines = r.lines.map((l) => lineDTO(db, l));
 	let unchecked = lines.filter((l) => !l.checked);
-	let tracking = lines.filter((l) => l.trackingMissing);
-	// niesprawdzone pozycje nie blokują – przy zamknięciu wypadają z PZ i zostają do przyjęcia później
+	// Rozładunek: magazynier nie wprowadza produktów – podaje tylko liczbę przyjętych nośników
+	let received = r.carriers ?? null;
+	let advised = advice.pallets;
+	let carrierDiff = received !== null && advised !== null ? received - advised : null;
 	let blockers: string[] = [];
-	for (let l of tracking) blockers.push(`${l.product.sku} – ${l.trackingMissing}`);
-	if (lines.every((l) => l.receivedQty === 0)) blockers.push('Nic nie przyjęto – sprawdź co najmniej jedną pozycję');
+	if (r.status !== 'DONE') {
+		if (received === null) blockers.push('Podaj liczbę przyjętych nośników');
+		else if (received < 1) blockers.push('Liczba nośników musi być większa od zera');
+	}
 
 	let alloc = r.allocationOrderId ? find(db.allocationOrders, r.allocationOrderId) : null;
 	let pos = [...new Set(r.lines.map((l) => l.purchaseOrderId))].map((id) => find(db.purchaseOrders, id));
@@ -175,6 +179,8 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 					linesDone: alloc.lines.filter((l) => placedQty(l) >= l.qty).length
 				}
 			: null,
+		carriers: { advised, received, diff: carrierDiff },
+		needsApproval: r.status !== 'DONE' && carrierDiff !== null && carrierDiff !== 0,
 		statusKey: r.status !== 'DONE' ? r.status : alloc && allocationStatus(alloc) === 'DONE' ? 'PZ_DONE' : 'PZ_TODO',
 		mwsSkipped: r.mwsSkipped,
 		pendingMws: r.pendingMws ?? null,
