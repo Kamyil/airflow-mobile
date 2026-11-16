@@ -5,7 +5,7 @@
 	import type { AdviceDetailDTO, AdviceDTO } from '$lib/types';
 	import { setParams } from '$lib/url';
 	import { toast } from '$lib/toast.svelte';
-	import { fmtDay, fmtDayLong, plural } from '$lib/format';
+	import { fmtDate, fmtDay, fmtDayLong, plural } from '$lib/format';
 	import Button from '$lib/components/Button.svelte';
 	import Badge from '$lib/components/Badge.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
@@ -19,6 +19,7 @@
 	import Layers from '@lucide/svelte/icons/layers';
 	import Check from '@lucide/svelte/icons/check';
 	import Clock from '@lucide/svelte/icons/clock';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 	import Phone from '@lucide/svelte/icons/phone';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
@@ -42,7 +43,11 @@
 		let set = f.offsets.includes(n) ? f.offsets.filter((x) => x !== n) : [...f.offsets, n];
 		if (!set.length) return;
 		set.sort((a, b) => a - b);
-		setParams({ dni: set.length === 1 && set[0] === 0 ? null : set.join(',') });
+		setParams({ data: null, dni: set.length === 1 && set[0] === 0 ? null : set.join(',') });
+	}
+	// konkretna data z kalendarza – zastępuje szybki wybór dni
+	function pickDate(d: string) {
+		if (d) setParams({ data: d, dni: null });
 	}
 	let multiDay = $derived(f.offsets.length > 1);
 	let pallets = $derived(data.advices.reduce((n, a) => n + a.pallets, 0));
@@ -80,13 +85,19 @@
 </script>
 
 <div class="flex flex-col gap-2.5 px-3 pt-3">
-	<div class="grid grid-cols-3 gap-1 rounded-xl bg-ink/6 p-1" role="group" aria-label="Dzień dostawy">
-		{#each _DAY_OFFSETS as n (n)}
-			{@const on = f.offsets.includes(n)}
-			<button type="button" aria-pressed={on} class="flex h-10 items-center justify-center gap-1 rounded-lg text-sm font-bold {on ? 'bg-surface shadow-sm' : 'text-muted'}" onclick={() => toggleDay(n)}>
-				{#if on}<Check class="size-4" strokeWidth={3} />{/if}{DAY_LABEL[n]}
-			</button>
-		{/each}
+	<div class="flex gap-1.5">
+		<div class="grid flex-1 grid-cols-3 gap-1 rounded-xl bg-ink/6 p-1" role="group" aria-label="Dzień dostawy">
+			{#each _DAY_OFFSETS as n (n)}
+				{@const on = f.offsets.includes(n)}
+				<button type="button" aria-pressed={on} class="flex h-10 items-center justify-center gap-1 rounded-lg text-sm font-bold {on ? 'bg-surface shadow-sm' : 'text-muted'}" onclick={() => toggleDay(n)}>
+					{#if on}<Check class="size-4" strokeWidth={3} />{/if}{DAY_LABEL[n]}
+				</button>
+			{/each}
+		</div>
+		<label class="relative flex shrink-0 items-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold {f.date ? 'border-task bg-task text-task-ink' : 'border-line-strong bg-surface text-ink-2'}">
+			<CalendarDays class="size-4" />{f.date ? fmtDate(f.date).slice(0, 5) : 'Data'}
+			<input type="date" aria-label="Wybierz datę" class="absolute inset-0 opacity-0" value={f.date ?? ''} onchange={(e) => pickDate(e.currentTarget.value)} />
+		</label>
 	</div>
 	<div class="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3">
 		<WarehouseDockFilters refs={data.context.refs} />
