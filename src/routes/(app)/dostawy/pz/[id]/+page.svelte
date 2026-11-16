@@ -23,7 +23,6 @@
 	import Layers from '@lucide/svelte/icons/layers';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Hourglass from '@lucide/svelte/icons/hourglass';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
@@ -142,8 +141,20 @@
 		approvalOpen = true;
 	}
 
-	function startClose() {
-		if (carriersDirty && r.carriers.received !== null) carriers = r.carriers.received;
+	// liczba na liczniku = liczba na PZ: niezapisaną zmianę zapisujemy przed podsumowaniem
+	async function startClose() {
+		if (carriersDirty) {
+			busy = true;
+			try {
+				await setReceiptCarriers(r.id, carriers);
+				await invalidateAll();
+			} catch (e) {
+				toast.error(e);
+				return;
+			} finally {
+				busy = false;
+			}
+		}
 		closeOpen = true;
 	}
 
@@ -289,7 +300,7 @@
 {#if !done && r.status !== 'AWAITING_APPROVAL'}
 	<div class="pb-safe fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md border-t border-line bg-surface/95 px-3 pt-3 backdrop-blur">
 		<div class="pb-3">
-			<Button variant={r.blockers.length ? 'primary' : 'ok'} size="lg" class="w-full" onclick={startClose}><Lock class="size-5" />Zakończ rozładunek</Button>
+			<Button variant="ok" size="lg" class="w-full" loading={busy} onclick={startClose}><Lock class="size-5" />Zakończ rozładunek</Button>
 		</div>
 	</div>
 {/if}
@@ -303,27 +314,23 @@
 
 <!-- podsumowanie przed zamknięciem -->
 <Sheet bind:open={closeOpen} title="Zakończyć rozładunek?" description="{r.number} · {r.supplier.name}">
-	{#if r.blockers.length}
-		<p class="mb-2 text-sm font-bold text-bad">Najpierw uzupełnij:</p>
-		<ul class="flex flex-col gap-2">
-			{#each r.blockers as b (b)}<li class="flex gap-3 rounded-xl bg-bad-soft p-3 text-sm font-semibold text-bad"><CircleAlert class="size-5 shrink-0" />{b}</li>{/each}
+	{#if r.warnings.length}
+		<ul class="mb-3 flex flex-col gap-2">
+			{#each r.warnings as w (w)}<li class="flex gap-3 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />{w}</li>{/each}
 		</ul>
-	{:else}
-		<dl class="divide-y divide-line rounded-xl border border-line text-sm">
-			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><Layers class="size-4" />Nośniki przyjęte</dt><dd class="font-bold">{r.carriers.received}{r.carriers.advised !== null ? ` / awizowano ${r.carriers.advised}` : ''}</dd></div>
-			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><FileText class="size-4" />Dokumenty</dt><dd class="font-bold {r.documents.length ? '' : 'text-warn'}">{r.documents.length ? `${r.documents.length} zdj.` : 'brak zdjęć'}</dd></div>
-			<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Pozycje z dokumentu</dt><dd class="font-bold">{r.lines.length}</dd></div>
-		</dl>
-		{#if r.needsApproval}
-			<p class="mt-3 flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica nośników {fmtDiff(r.carriers.diff ?? 0)} – po wyborze potrzebny PIN przełożonego.</p>
-		{/if}
-		<p class="mt-3 text-sm text-muted">Towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>, a PZ będzie do realizacji. Zlecenie MWS (alokacja) można też wygenerować później.</p>
 	{/if}
+	<dl class="divide-y divide-line rounded-xl border border-line text-sm">
+		<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><Layers class="size-4" />Nośniki przyjęte</dt><dd class="font-bold">{r.carriers.received ?? '—'}{r.carriers.advised !== null ? ` / awizowano ${r.carriers.advised}` : ''}</dd></div>
+		<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><FileText class="size-4" />Dokumenty</dt><dd class="font-bold {r.documents.length ? '' : 'text-warn'}">{r.documents.length ? `${r.documents.length} zdj.` : 'brak zdjęć'}</dd></div>
+		<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Pozycje z dokumentu</dt><dd class="font-bold">{r.lines.length}</dd></div>
+	</dl>
+	{#if r.needsApproval}
+		<p class="mt-3 flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica nośników {fmtDiff(r.carriers.diff ?? 0)} – po wyborze potrzebny PIN przełożonego.</p>
+	{/if}
+	<p class="mt-3 text-sm text-muted">Towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>, a PZ będzie do realizacji. Zlecenie MWS (alokacja) można też wygenerować później.</p>
 	{#snippet footer()}
-		{#if !r.blockers.length}
-			<Button variant="ok" size="lg" onclick={() => choose(true)}><ArrowDownToLine class="size-5" />Zamknij z generowaniem MWS</Button>
-			<Button size="lg" onclick={() => choose(false)}><Ban class="size-5" />Zamknij bez generowania MWS</Button>
-		{/if}
+		<Button variant="ok" size="lg" onclick={() => choose(true)}><ArrowDownToLine class="size-5" />Zamknij z generowaniem MWS</Button>
+		<Button size="lg" onclick={() => choose(false)}><Ban class="size-5" />Zamknij bez generowania MWS</Button>
 		<Button variant="ghost" size="lg" onclick={() => (closeOpen = false)}>Wróć</Button>
 	{/snippet}
 </Sheet>

@@ -142,10 +142,11 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 	let received = r.carriers ?? null;
 	let advised = advice.pallets;
 	let carrierDiff = received !== null && advised !== null ? received - advised : null;
-	let blockers: string[] = [];
+	// ostrzeżenia – nie blokują zakończenia rozładunku
+	let warnings: string[] = [];
 	if (r.status !== 'DONE') {
-		if (received === null) blockers.push('Podaj liczbę przyjętych nośników');
-		else if (received < 1) blockers.push('Liczba nośników musi być większa od zera');
+		if (received === null) warnings.push('Nie podano liczby przyjętych nośników');
+		else if (received < 1) warnings.push('Liczba przyjętych nośników: 0');
 	}
 
 	let alloc = r.allocationOrderId ? find(db.allocationOrders, r.allocationOrderId) : null;
@@ -169,7 +170,7 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 		progress: { lines: lines.length, linesChecked: lines.length - unchecked.length },
 		totals: { expected: sum(lines, (l) => l.expectedQty), received: sum(lines, (l) => l.receivedQty) },
 		discrepancies: discrepanciesOf(lines),
-		blockers,
+		warnings,
 		allocation: alloc
 			? {
 					id: alloc.id,

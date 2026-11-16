@@ -715,8 +715,8 @@ export interface ReceiptDTO {
 	progress: { lines: number; linesChecked: number };
 	totals: { expected: number; received: number };
 	discrepancies: Discrepancy[];
-	/** Co blokuje zamknięcie PZ */
-	blockers: string[];
+	/** ostrzeżenia przed zakończeniem rozładunku – nie blokują */
+	warnings: string[];
 	allocation: { id: string; number: string; status: AllocationStatus; linesDone: number; lines: number } | null;
 	/**
 	 * Status do wyświetlenia. Zakończenie przyjęcia nie zamyka PZ – jest "Do realizacji";

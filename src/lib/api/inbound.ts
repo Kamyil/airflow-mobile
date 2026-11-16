@@ -145,8 +145,6 @@ export function setReceiptCarriers(receiptId: string, carriers: number): Promise
 export function requestApproval(receiptId: string, generateMws: boolean): Promise<void> {
 	return mutate('Wysłanie PZ do akceptacji', (db) => {
 		let r = editableReceipt(db, receiptId);
-		let dto = receiptDTO(db, r);
-		if (dto.blockers.length) throw new ApiError('VALIDATION', 'Najpierw uzupełnij PZ', dto.blockers);
 		r.status = 'AWAITING_APPROVAL';
 		r.pendingMws = generateMws;
 	});
@@ -170,7 +168,6 @@ export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions)
 	return mutate(opts.generateMws ? 'Zakończenie rozładunku' : 'Zakończenie rozładunku bez zlecenia MWS', (db) => {
 		let r = editableReceipt(db, receiptId);
 		let dto = receiptDTO(db, r);
-		if (dto.blockers.length) throw new ApiError('VALIDATION', `Nie można zakończyć rozładunku ${r.number}`, dto.blockers);
 
 		if (dto.needsApproval) {
 			if (!opts.approval) throw new ApiError('APPROVAL_REQUIRED', 'Różnica nośników wymaga zatwierdzenia przełożonego');
