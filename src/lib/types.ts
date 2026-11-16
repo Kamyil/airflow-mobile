@@ -714,6 +714,11 @@ export interface ReceiptDTO {
 	/** Co blokuje zamknięcie PZ */
 	blockers: string[];
 	allocation: { id: string; number: string; status: AllocationStatus; linesDone: number; lines: number } | null;
+	/**
+	 * Status do wyświetlenia. Zakończenie przyjęcia nie zamyka PZ – jest "Do realizacji";
+	 * PZ zamyka się sama (w makiecie: gdy towar ze zlecenia MWS jest na półkach).
+	 */
+	statusKey: ReceiptStatus | 'PZ_TODO' | 'PZ_DONE';
 	mwsSkipped: boolean;
 	labelsPrintedAt: string | null;
 	documents: ReceiptDocument[];

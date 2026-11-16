@@ -20,7 +20,7 @@
 <div class="flex flex-col gap-2.5 px-3 pt-3">
 	<DayPicker value={data.date} onChange={(d) => setParams({ dzien: d })} />
 	<div class="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3"><WarehouseDockFilters refs={data.context.refs} /></div>
-	<p class="px-1 text-xs text-muted">Zrealizowane PZ – {fmtDayLong(data.date)}: <b class="text-ink">{data.receipts.length}</b></p>
+	<p class="px-1 text-xs text-muted">Przyjęte PZ – {fmtDayLong(data.date)}: <b class="text-ink">{data.receipts.length}</b></p>
 	<SearchBox bind:value={q} placeholder="Nr PZ, dostawca, ZZ…" />
 </div>
 
@@ -28,6 +28,6 @@
 	{#each visible as r (r.id)}
 		<li><ReceiptCard {r} /></li>
 	{:else}
-		<li><Empty>Brak zrealizowanych PZ w tym dniu</Empty></li>
+		<li><Empty>Brak przyjętych PZ w tym dniu</Empty></li>
 	{/each}
 </ul>

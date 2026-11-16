@@ -4,7 +4,7 @@ import type { AdviceDetailDTO, AdviceDTO, BatchEntry, Db, GoodsLabelDTO, Receipt
 import { ApiError, latency, mutate, now, query, requireOnline, who } from './core';
 import { assertSupervisor } from './session';
 
-/** Dostawy: awizacje (Do przyjęcia) -> PZ (W trakcie) -> PZ zrealizowane (Przyjęte) -> zlecenie MWS (Alokacja) */
+/** Dostawy: awizacje (Do przyjęcia) -> PZ (W trakcie) -> PZ do realizacji (Przyjęte; zamyka się sama) -> zlecenie MWS (Alokacja) */
 
 export interface AdviceFilter {
 	/** Dni dostawy (YYYY-MM-DD) – wybór wielokrotny: wczoraj / dziś / jutro */
@@ -127,7 +127,7 @@ export function getReceipt(id: string): Promise<ReceiptDTO> {
 
 function editableReceipt(db: Db, id: string): Receipt {
 	let r = find(db.receipts, id);
-	if (r.status === 'DONE') throw new ApiError('VALIDATION', `${r.number} jest już zrealizowana`);
+	if (r.status === 'DONE') throw new ApiError('VALIDATION', `Przyjęcie ${r.number} jest już zakończone`);
 	return r;
 }
 
@@ -202,14 +202,14 @@ export interface CloseReceiptOptions {
 	generateMws: boolean;
 }
 
-/** Zamknięcie PZ: towar na miejsce odstawcze DOKu, opcjonalnie Impuls generuje zlecenie MWS (alokacja) */
+/** Zakończenie przyjęcia: PZ -> Do realizacji (nie zamyka jej), towar na miejsce odstawcze DOKu, opcjonalnie Impuls generuje zlecenie MWS */
 export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions): Promise<{ allocationOrderId: string | null; number: string | null; deferred: number }> {
-	requireOnline(opts.generateMws ? 'generowanie zlecenia magazynowego MWS w Impulsie' : 'zamknięcie PZ w Impulsie');
+	requireOnline(opts.generateMws ? 'generowanie zlecenia magazynowego MWS w Impulsie' : 'zakończenie przyjęcia w Impulsie');
 	await latency(opts.generateMws ? 1400 : 700, 500); // wywołanie funkcji Impulsa trwa dłużej
-	return mutate(opts.generateMws ? 'Zamknięcie PZ' : 'Zamknięcie PZ bez zlecenia MWS', (db) => {
+	return mutate(opts.generateMws ? 'Zakończenie przyjęcia' : 'Zakończenie przyjęcia bez zlecenia MWS', (db) => {
 		let r = editableReceipt(db, receiptId);
 		let dto = receiptDTO(db, r);
-		if (dto.blockers.length) throw new ApiError('VALIDATION', `Nie można zamknąć ${r.number}`, dto.blockers);
+		if (dto.blockers.length) throw new ApiError('VALIDATION', `Nie można zakończyć przyjęcia ${r.number}`, dto.blockers);
 
 		if (dto.discrepancies.length) {
 			if (!opts.approval) throw new ApiError('APPROVAL_REQUIRED', 'Rozbieżności wymagają zatwierdzenia przełożonego');
@@ -331,7 +331,7 @@ export function removeReceiptDocument(receiptId: string, documentId: string): Pr
 export function printReceiptLabels(receiptId: string): Promise<GoodsLabelDTO[]> {
 	return mutate('Druk etykiet PZ', (db) => {
 		let r = find(db.receipts, receiptId);
-		if (r.status !== 'DONE') throw new ApiError('VALIDATION', 'Etykiety drukuje się po zamknięciu PZ');
+		if (r.status !== 'DONE') throw new ApiError('VALIDATION', 'Etykiety drukuje się po zakończeniu przyjęcia');
 		let supplier = find(db.suppliers, find(db.advices, r.adviceId).supplierId).name;
 		let location = find(db.docks, r.dockId).stagingLocation;
 		r.labelsPrintedAt = now();

@@ -175,6 +175,7 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 					linesDone: alloc.lines.filter((l) => placedQty(l) >= l.qty).length
 				}
 			: null,
+		statusKey: r.status !== 'DONE' ? r.status : alloc && allocationStatus(alloc) === 'DONE' ? 'PZ_DONE' : 'PZ_TODO',
 		mwsSkipped: r.mwsSkipped,
 		labelsPrintedAt: r.labelsPrintedAt,
 		documents: r.documents,

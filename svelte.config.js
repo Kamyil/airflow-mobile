@@ -5,6 +5,8 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 export default {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter({ runtime: 'nodejs24.x' })
+		adapter: adapter({ runtime: 'nodejs24.x' }),
+		// sprawdzaj co minutę, czy jest nowsza wersja (patrz beforeNavigate w +layout.svelte)
+		version: { pollInterval: 60_000 }
 	}
 };

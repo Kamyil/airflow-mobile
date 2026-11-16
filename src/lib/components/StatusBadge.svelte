@@ -4,9 +4,11 @@
 	export const STATUS: Record<string, [string, Tone]> = {
 		// PZ
 		NEW: ['Nowa', 'info'],
-		IN_PROGRESS: ['W przyjmowaniu', 'task'],
+		IN_PROGRESS: ['Wystawione', 'task'],
 		AWAITING_APPROVAL: ['Czeka na akceptację', 'warn'],
 		DONE: ['Zrealizowana', 'ok'],
+		PZ_TODO: ['Do realizacji', 'info'],
+		PZ_DONE: ['Zrealizowana', 'ok'],
 		// MM / ZM / INW
 		DRAFT: ['Szkic', 'neutral'],
 		TODO: ['Do realizacji', 'info'],

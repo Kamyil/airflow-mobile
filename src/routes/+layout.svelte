@@ -1,9 +1,19 @@
 <script lang="ts">
 	import '../app.css';
-	import { navigating } from '$app/state';
+	import { beforeNavigate } from '$app/navigation';
+	import { navigating, updated } from '$app/state';
 	import Toaster from '$lib/components/Toaster.svelte';
 
 	let { children } = $props();
+
+	// Po wdrożeniu nowej wersji stare pliki JS znikają z serwera – zamiast błędu 500
+	// przy następnej nawigacji ładujemy stronę od nowa (dane makiety są w localStorage, nic nie ginie).
+	beforeNavigate(({ willUnload, to, cancel }) => {
+		if (updated.current && !willUnload && to?.url) {
+			cancel();
+			location.href = to.url.href;
+		}
+	});
 </script>
 
 {#if navigating.to}
