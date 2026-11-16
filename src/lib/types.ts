@@ -415,8 +415,6 @@ export interface PurchaseOrder {
 	lines: PurchaseOrderLine[];
 }
 
-export type TruckStatus = 'AWIZOWANE' | 'NA_PLACU' | 'POD_DOKIEM';
-
 export interface Advice {
 	id: string;
 	number: string;
@@ -430,8 +428,8 @@ export interface Advice {
 	/** Jedna awizacja (jedno auto) może obejmować kilka ZZ */
 	purchaseOrderIds: string[];
 	vehicle: { plate: string; driver: string; phone: string };
-	truckStatus: TruckStatus;
-	arrivedAt: string | null;
+	/** Liczba palet zgłoszona w awizacji */
+	pallets: number;
 	note: string | null;
 }
 
@@ -633,8 +631,7 @@ export interface AdviceDTO {
 	dock: Dock;
 	supplier: Supplier;
 	vehicle: Advice['vehicle'];
-	truckStatus: TruckStatus;
-	arrivedAt: string | null;
+	pallets: number;
 	note: string | null;
 	purchaseOrders: { id: string; number: string; lines: number }[];
 	lines: number;
@@ -645,7 +642,7 @@ export interface AdviceDTO {
 	fullyReceived: boolean;
 	openReceipt: { id: string; number: string; status: ReceiptStatus } | null;
 	receipts: { id: string; number: string; status: ReceiptStatus }[];
-	/** Slot minął, a auta nie ma */
+	/** Okno minęło, a przyjęcie nie zostało rozpoczęte */
 	late: boolean;
 	flags: ProductFlags;
 }
@@ -808,5 +805,6 @@ export interface DispatchGroupDTO {
 }
 
 export interface AdviceDetailDTO extends AdviceDTO {
-	items: { product: string; sku: string; ordered: number; received: number; poNumber: string }[];
+	/** Pozycje do przyjęcia (pozostałe z ZZ) – flagi KJ/SERIA/SN są per produkt */
+	items: { product: Product; ordered: number; remaining: number; poNumber: string }[];
 }

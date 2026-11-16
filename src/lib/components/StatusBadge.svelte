@@ -8,9 +8,6 @@
 		AWAITING_APPROVAL: ['Czeka na akceptację', 'warn'],
 		DONE: ['Zrealizowana', 'ok'],
 		// auto
-		AWIZOWANE: ['Awizowane', 'neutral'],
-		NA_PLACU: ['Na placu', 'warn'],
-		POD_DOKIEM: ['Pod DOKiem', 'ok'],
 		// MM / ZM / INW
 		DRAFT: ['Szkic', 'neutral'],
 		TODO: ['Do realizacji', 'info'],

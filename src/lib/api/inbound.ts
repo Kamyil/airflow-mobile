@@ -1,36 +1,35 @@
 import { find } from '$lib/mock/domain';
 import { addStock, adviceDTO, openReceiptOf, receiptDTO, receivedOnPoLine, suggestLocation } from '$lib/mock/warehouse';
-import type { AdviceDetailDTO, AdviceDTO, BatchEntry, Db, GoodsLabelDTO, Receipt, ReceiptDTO, TruckStatus } from '$lib/types';
+import type { AdviceDetailDTO, AdviceDTO, BatchEntry, Db, GoodsLabelDTO, Receipt, ReceiptDTO } from '$lib/types';
 import { ApiError, latency, mutate, now, query, requireOnline, who } from './core';
 import { assertSupervisor } from './session';
 
 /** Dostawy: awizacje (Do przyjęcia) -> PZ (W trakcie) -> PZ zrealizowane (Przyjęte) -> zlecenie MWS (Alokacja) */
 
 export interface AdviceFilter {
-	date: string;
+	/** Dni dostawy (YYYY-MM-DD) – wybór wielokrotny: wczoraj / dziś / jutro */
+	dates: string[];
 	warehouseId?: string | null;
 	dockId?: string | null;
-	truckStatus?: TruckStatus | null;
-	/** Godzina początku okna, np. "08" */
-	hour?: string | null;
 	q?: string | null;
 }
 
 const match = (q: string | null | undefined, ...values: string[]) => !q?.trim() || values.some((v) => v.toLowerCase().includes(q.trim().toLowerCase()));
 
-/** Awizacje na dzień – bez tych, które są już w całości przyjęte */
+/**
+ * Do przyjęcia: awizacje z wybranych dni, na których nic się teraz nie dzieje.
+ * Pomija w całości przyjęte oraz te z otwartą PZ (są w zakładce W trakcie).
+ */
 export function listAdvices(f: AdviceFilter): Promise<AdviceDTO[]> {
 	return query((db) =>
 		db.advices
-			.filter((a) => a.date === f.date)
+			.filter((a) => f.dates.includes(a.date))
 			.filter((a) => !f.warehouseId || a.warehouseId === f.warehouseId)
 			.filter((a) => !f.dockId || a.dockId === f.dockId)
-			.filter((a) => !f.truckStatus || a.truckStatus === f.truckStatus)
-			.filter((a) => !f.hour || a.slotFrom.startsWith(f.hour))
 			.map((a) => adviceDTO(db, a))
-			.filter((a) => !a.fullyReceived)
+			.filter((a) => !a.fullyReceived && !a.openReceipt)
 			.filter((a) => match(f.q, a.number, a.supplier.name, a.vehicle.plate, a.vehicle.driver, ...a.purchaseOrders.map((p) => p.number)))
-			.sort((a, b) => a.slotFrom.localeCompare(b.slotFrom) || a.number.localeCompare(b.number))
+			.sort((a, b) => a.date.localeCompare(b.date) || a.slotFrom.localeCompare(b.slotFrom) || a.number.localeCompare(b.number))
 	);
 }
 
@@ -40,21 +39,11 @@ export function getAdvice(id: string): Promise<AdviceDetailDTO> {
 		if (!a) throw new ApiError('NOT_FOUND', 'Nie znaleziono awizacji');
 		let items = a.purchaseOrderIds.flatMap((poId) => {
 			let po = find(db.purchaseOrders, poId);
-			return po.lines.map((l) => {
-				let p = find(db.products, l.productId);
-				return { product: p.name, sku: p.sku, ordered: l.qty, received: receivedOnPoLine(db, l.id), poNumber: po.number };
-			});
+			return po.lines
+				.map((l) => ({ product: find(db.products, l.productId), ordered: l.qty, remaining: l.qty - receivedOnPoLine(db, l.id), poNumber: po.number }))
+				.filter((l) => l.remaining > 0);
 		});
 		return { ...adviceDTO(db, a), items };
-	});
-}
-
-export function setTruckStatus(adviceId: string, status: TruckStatus): Promise<void> {
-	return mutate('Zmiana statusu auta', (db) => {
-		let a = find(db.advices, adviceId);
-		a.truckStatus = status;
-		if (status !== 'AWIZOWANE') a.arrivedAt ??= now();
-		else a.arrivedAt = null;
 	});
 }
 
@@ -101,10 +90,6 @@ export function startReceipt(adviceId: string): Promise<{ receiptId: string; cre
 			allocationOrderId: null,
 			labelsPrintedAt: null
 		});
-		if (a.truckStatus !== 'POD_DOKIEM') {
-			a.truckStatus = 'POD_DOKIEM';
-			a.arrivedAt ??= now();
-		}
 		return { receiptId: id, created: true };
 	});
 }

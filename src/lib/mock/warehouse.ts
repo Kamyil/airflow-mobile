@@ -83,8 +83,7 @@ export function adviceDTO(db: Db, a: Advice): AdviceDTO {
 		dock: find(db.docks, a.dockId),
 		supplier: find(db.suppliers, a.supplierId),
 		vehicle: a.vehicle,
-		truckStatus: a.truckStatus,
-		arrivedAt: a.arrivedAt,
+		pallets: a.pallets,
 		note: a.note,
 		purchaseOrders: pos.map((po) => ({ id: po.id, number: po.number, lines: po.lines.length })),
 		lines: lines.length,
@@ -95,7 +94,7 @@ export function adviceDTO(db: Db, a: Advice): AdviceDTO {
 		fullyReceived: fully,
 		openReceipt: open ? { id: open.id, number: open.number, status: open.status } : null,
 		receipts: receipts.map((r) => ({ id: r.id, number: r.number, status: r.status })),
-		late: a.truckStatus === 'AWIZOWANE' && (a.date < today() || (a.date === today() && a.slotTo < nowHM())),
+		late: !open && received === 0 && (a.date < today() || (a.date === today() && a.slotTo < nowHM())),
 		flags: flagsOf(lines.map((l) => find(db.products, l.productId)))
 	};
 }
