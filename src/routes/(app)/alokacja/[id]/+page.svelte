@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { alternativeLocations, ApiError, deferPutaway, placePutaway } from '$lib/api';
+	import { alternativeLocations, ApiError, checkPutawayLocation, deferPutaway, placePutaway } from '$lib/api';
 	import type { PutawayLineDTO } from '$lib/types';
 	import { toast } from '$lib/toast.svelte';
 	import { fmtDate, fmtTime } from '$lib/format';
@@ -20,6 +20,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import CircleCheckBig from '@lucide/svelte/icons/circle-check-big';
 	import Lightbulb from '@lucide/svelte/icons/lightbulb';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import Undo2 from '@lucide/svelte/icons/undo-2';
 
 	let { data } = $props();
 	let o = $derived(data.order);
@@ -30,8 +32,7 @@
 	let tab = $derived((page.url.searchParams.get('tab') as Tab) ?? 'zadanie');
 	const setTab = (t: Tab) => goto(t === 'zadanie' ? '?' : `?tab=${t}`, { replaceState: true, noScroll: true, keepFocus: true });
 
-	// --- krok: ilość -> skan lokalizacji ---
-	let step = $state<'qty' | 'location'>('qty');
+	// --- ilość + skan półki, na którą magazynier faktycznie odkłada ---
 	let qty = $state(0);
 	let target = $state<string | null>(null);
 
@@ -39,24 +40,47 @@
 	$effect.pre(() => {
 		current?.id;
 		current?.remainingQty;
-		step = 'qty';
 		qty = current?.remainingQty ?? 0;
 		target = current?.suggestedLocation ?? null;
 	});
 
+	// zeskanowana inna półka niż proponowana – czeka na decyzję magazyniera
+	let otherShelf = $state<string | null>(null);
+	let otherOpen = $state(false);
+	$effect(() => {
+		if (!otherOpen) otherShelf = null;
+	});
+
 	async function onLocation(code: string): Promise<string | null> {
+		if (!current) return null;
+		try {
+			let shelf = await checkPutawayLocation(o.id, code);
+			if (shelf !== target) {
+				otherShelf = shelf;
+				otherOpen = true;
+				return null;
+			}
+			return await place(shelf);
+		} catch (e) {
+			if (e instanceof ApiError) return e.message;
+			throw e;
+		}
+	}
+
+	async function place(code: string): Promise<string | null> {
 		if (!current) return null;
 		let line = current;
 		busy = true;
 		try {
 			let { done } = await placePutaway({ orderId: o.id, lineId: line.id, location: code, qty });
-			if (code !== line.suggestedLocation) toast.info(`Odłożono na ${code}`, `Inna lokalizacja niż podpowiedź (${line.suggestedLocation})`);
+			otherOpen = false;
+			if (code !== line.suggestedLocation) toast.info(`Odłożono ${qty} ${line.product.unit} → ${code}`, `Inna półka niż podpowiedź Impulsa (${line.suggestedLocation})`);
 			else toast.ok(`Odłożono ${qty} ${line.product.unit} → ${code}`, line.product.name);
 			if (done) toast.ok(`${o.number} zakończone`, 'Cały towar jest na półkach.');
 			await invalidateAll();
 			return null;
 		} catch (e) {
-			if (e instanceof ApiError) return e.message;
+			otherOpen = false;
 			toast.error(e);
 			return null;
 		} finally {
@@ -137,33 +161,14 @@
 				</div>
 			</section>
 
-			<ol class="overflow-hidden rounded-3xl bg-surface ring-1 ring-line">
-				<li class="border-b border-line {step === 'qty' ? 'bg-task-soft' : ''}">
-					<button type="button" class="flex w-full items-center gap-3 px-4 py-3 text-left" disabled={step === 'qty'} onclick={() => (step = 'qty')}>
-						<span class="grid size-7 place-items-center rounded-full text-sm font-extrabold {step === 'qty' ? 'bg-ink text-white' : 'bg-ok text-white'}">{#if step === 'qty'}1{:else}<Check class="size-4" strokeWidth={3} />{/if}</span>
-						<span class="flex-1 font-bold">Ilość do odłożenia</span>
-						{#if step !== 'qty'}<span class="font-mono text-sm font-bold text-ok">{qty} {current.product.unit}</span>{/if}
-					</button>
-					{#if step === 'qty'}
-						<div class="flex gap-2 px-4 pb-4">
-							<QtyStepper bind:value={qty} min={1} max={current.remainingQty} unit={current.product.unit} size="lg" class="flex-1" />
-							<Button variant="primary" size="lg" class="h-14" onclick={() => (step = 'location')}>Dalej</Button>
-						</div>
-						{#if qty < current.remainingQty}<p class="-mt-2 px-4 pb-3 text-xs text-muted">Częściowo – {current.remainingQty - qty} zostanie na {current.fromLocation}</p>{/if}
-					{/if}
-				</li>
-				<li class={step === 'location' ? 'bg-task-soft' : ''}>
-					<div class="flex items-center gap-3 px-4 py-3">
-						<span class="grid size-7 place-items-center rounded-full text-sm font-extrabold {step === 'location' ? 'bg-ink text-white' : 'bg-bg text-muted'}">2</span>
-						<span class="flex-1 font-bold {step === 'location' ? '' : 'text-muted'}">Zeskanuj lokalizację docelową</span>
-					</div>
-					{#if step === 'location'}
-						<div class="px-4 pb-4">
-							<ScanInput placeholder="Kod lokalizacji" onScan={onLocation} {busy} hints={[{ code: target!, label: target! }]} />
-						</div>
-					{/if}
-				</li>
-			</ol>
+			<!-- ilość (domyślnie całość) i skan półki zaraz pod podpowiedzią -->
+			<section class="rounded-3xl bg-surface p-4 ring-1 ring-line">
+				<p class="mb-1.5 text-sm font-bold">Ilość do odłożenia</p>
+				<QtyStepper bind:value={qty} min={1} max={current.remainingQty} unit={current.product.unit} size="lg" />
+				{#if qty < current.remainingQty}<p class="mt-1 text-xs text-muted">Częściowo – {current.remainingQty - qty} zostanie na {current.fromLocation}</p>{/if}
+				<p class="mt-4 mb-1.5 text-sm font-bold">Zeskanuj półkę, na którą odkładasz</p>
+				<ScanInput placeholder="Numer półki" onScan={onLocation} {busy} hints={[{ code: target!, label: target! }, { code: target === 'B-02-01-A' ? 'B-02-02-A' : 'B-02-01-A', label: 'inna półka' }]} />
+			</section>
 
 			<div class="grid grid-cols-2 gap-2">
 				<Button disabled={busy} onclick={openAlternatives}><Shuffle class="size-4" />Inna lokalizacja</Button>
@@ -189,7 +194,7 @@
 						<p class="truncate font-semibold">{l.product.name}</p>
 						<p class="font-mono text-xs text-muted">{l.fromLocation} → <b class="text-ink">{l.suggestedLocation}</b>{l.batch ? ` · ${l.batch}` : ''}</p>
 						{#each l.placements as p, i (i)}
-							<p class="text-xs text-ok">✓ {p.qty} → {p.location} · {p.by}, {fmtTime(p.at)}</p>
+							<p class="text-xs text-ok">✓ {p.qty} → {p.location}{#if p.location !== l.suggestedLocation}<span class="font-bold text-warn"> (inna niż podpowiedź)</span>{/if} · {p.by}, {fmtTime(p.at)}</p>
 						{/each}
 					</div>
 					<span class="font-mono font-bold whitespace-nowrap">{l.placedQty}/{l.qty}</span>
@@ -213,6 +218,21 @@
 				</li>
 			{/each}
 		</ul>
-		<p class="mt-3 text-xs text-muted">Możesz też od razu zeskanować dowolną inną lokalizację w kroku 2.</p>
+		<p class="mt-3 text-xs text-muted">Możesz też od razu zeskanować dowolną inną półkę.</p>
 	{/if}
+</Sheet>
+
+<!-- inna półka niż proponowana -->
+<Sheet bind:open={otherOpen} title="Inna półka niż proponowana" description={current ? `${current.product.name} · ${qty} ${current.product.unit}` : ''}>
+	{#if current && otherShelf}
+		<p class="flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Odkładasz towar na inną półkę niż proponowana. Czy chcesz tutaj zostawić towar, czy wrócić do proponowanej półki?</p>
+		<div class="mt-3 grid grid-cols-2 gap-2 text-center">
+			<div class="rounded-2xl bg-bg p-3"><p class="text-xs text-muted">Proponowana</p><p class="font-mono text-xl font-extrabold">{target}</p></div>
+			<div class="rounded-2xl bg-task-soft p-3"><p class="text-xs text-muted">Zeskanowana</p><p class="font-mono text-xl font-extrabold">{otherShelf}</p></div>
+		</div>
+	{/if}
+	{#snippet footer()}
+		<Button variant="task" size="lg" loading={busy} onclick={() => otherShelf && place(otherShelf)}><Check class="size-5" />Zostaw na {otherShelf}</Button>
+		<Button size="lg" disabled={busy} onclick={() => (otherOpen = false)}><Undo2 class="size-5" />Wróć do proponowanej ({target})</Button>
+	{/snippet}
 </Sheet>

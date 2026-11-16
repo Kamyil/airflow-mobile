@@ -53,15 +53,25 @@ function editable(db: Db, orderId: string) {
 }
 
 /** Odłożenie towaru na półkę: zeskanowana lokalizacja + ilość */
+function storageLocation(db: Db, warehouseId: string, raw: string) {
+	let code = raw.trim().toUpperCase();
+	let loc = db.locations.find((l) => l.warehouseId === warehouseId && l.code === code);
+	if (!loc) throw new ApiError('VALIDATION', `Nieznana lokalizacja ${code}`);
+	if (loc.kind !== 'STORAGE') throw new ApiError('VALIDATION', `${code} to miejsce odstawcze – wybierz półkę`);
+	return code;
+}
+
+/** Sprawdzenie zeskanowanej półki przed odłożeniem (np. zanim zapytamy o inną niż podpowiedź) */
+export function checkPutawayLocation(orderId: string, location: string): Promise<string> {
+	return query((db) => storageLocation(db, find(db.allocationOrders, orderId).warehouseId, location));
+}
+
 export function placePutaway(input: { orderId: string; lineId: string; location: string; qty: number }): Promise<{ done: boolean }> {
 	return mutate('Alokacja – odłożenie na półkę', (db) => {
 		let o = editable(db, input.orderId);
 		let line = o.lines.find((l) => l.id === input.lineId);
 		if (!line) throw new ApiError('NOT_FOUND', 'Nie znaleziono pozycji');
-		let code = input.location.trim().toUpperCase();
-		let loc = db.locations.find((l) => l.warehouseId === o.warehouseId && l.code === code);
-		if (!loc) throw new ApiError('VALIDATION', `Nieznana lokalizacja ${code}`);
-		if (loc.kind !== 'STORAGE') throw new ApiError('VALIDATION', `${code} to miejsce odstawcze – wybierz półkę`);
+		let code = storageLocation(db, o.warehouseId, input.location);
 		let remaining = line.qty - placedQty(line);
 		if (!(input.qty > 0) || input.qty > remaining) throw new ApiError('VALIDATION', `Ilość musi być z zakresu 1–${remaining}`);
 
