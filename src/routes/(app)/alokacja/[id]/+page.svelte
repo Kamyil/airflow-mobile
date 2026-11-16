@@ -40,7 +40,7 @@
 	$effect.pre(() => {
 		current?.id;
 		current?.remainingQty;
-		qty = current?.remainingQty ?? 0;
+		qty = 0; // magazynier sam podaje, ile odkłada
 		target = current?.suggestedLocation ?? null;
 	});
 
@@ -53,6 +53,7 @@
 
 	async function onLocation(code: string): Promise<string | null> {
 		if (!current) return null;
+		if (qty < 1) return 'Najpierw podaj ilość do odłożenia';
 		try {
 			let shelf = await checkPutawayLocation(o.id, code);
 			if (shelf !== target) {
@@ -171,9 +172,12 @@
 
 			<!-- ilość (domyślnie całość) – zmieniasz przed skanem, gdy odkładasz część -->
 			<section class="rounded-3xl bg-surface p-4 ring-1 ring-line">
-				<p class="mb-1.5 text-sm font-bold">Ilość do odłożenia</p>
-				<QtyStepper bind:value={qty} min={1} max={current.remainingQty} unit={current.product.unit} size="lg" />
-				{#if qty < current.remainingQty}<p class="mt-1 text-xs text-muted">Częściowo – {current.remainingQty - qty} zostanie na {current.fromLocation}</p>{/if}
+				<div class="mb-1.5 flex items-center justify-between gap-2">
+					<p class="text-sm font-bold">Ilość do odłożenia</p>
+					<Button size="sm" onclick={() => (qty = current!.remainingQty)}>Całość ({current.remainingQty})</Button>
+				</div>
+				<QtyStepper bind:value={qty} min={0} max={current.remainingQty} unit={current.product.unit} size="lg" />
+				{#if qty > 0 && qty < current.remainingQty}<p class="mt-1 text-xs text-muted">Częściowo – {current.remainingQty - qty} zostanie na {current.fromLocation}</p>{/if}
 			</section>
 
 			<Button disabled={busy || o.queue.length < 2} onclick={skip}><SkipForward class="size-4" />Pomiń pozycję</Button>
