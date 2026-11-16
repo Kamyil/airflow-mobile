@@ -157,23 +157,26 @@
 				<div class="flex justify-center"><ArrowDown class="size-6 text-muted" /></div>
 				<div class="m-3 rounded-2xl bg-task p-4 text-task-ink">
 					<p class="flex items-center gap-1.5 text-xs font-bold uppercase"><Lightbulb class="size-4" />{target === current.suggestedLocation ? 'Podpowiedź Impulsa – odłóż na' : 'Wybrana lokalizacja'}</p>
-					<p class="font-mono text-4xl font-extrabold tracking-tight">{target}</p>
+					<div class="flex items-center justify-between gap-2">
+						<p class="font-mono text-4xl font-extrabold tracking-tight">{target}</p>
+						<button type="button" class="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-task-ink/10 px-3 text-sm font-bold active:bg-task-ink/20 disabled:opacity-40" disabled={busy} onclick={openAlternatives}><Shuffle class="size-4" />Inna</button>
+					</div>
+				</div>
+				<!-- skan półki zaraz pod podpowiedzią -->
+				<div class="px-4 pb-4">
+					<p class="mb-1.5 text-sm font-bold">Zeskanuj półkę, na którą odkładasz</p>
+					<ScanInput placeholder="Numer półki" onScan={onLocation} {busy} hints={[{ code: target!, label: target! }, { code: target === 'B-02-01-A' ? 'B-02-02-A' : 'B-02-01-A', label: 'inna półka' }]} />
 				</div>
 			</section>
 
-			<!-- ilość (domyślnie całość) i skan półki zaraz pod podpowiedzią -->
+			<!-- ilość (domyślnie całość) – zmieniasz przed skanem, gdy odkładasz część -->
 			<section class="rounded-3xl bg-surface p-4 ring-1 ring-line">
 				<p class="mb-1.5 text-sm font-bold">Ilość do odłożenia</p>
 				<QtyStepper bind:value={qty} min={1} max={current.remainingQty} unit={current.product.unit} size="lg" />
 				{#if qty < current.remainingQty}<p class="mt-1 text-xs text-muted">Częściowo – {current.remainingQty - qty} zostanie na {current.fromLocation}</p>{/if}
-				<p class="mt-4 mb-1.5 text-sm font-bold">Zeskanuj półkę, na którą odkładasz</p>
-				<ScanInput placeholder="Numer półki" onScan={onLocation} {busy} hints={[{ code: target!, label: target! }, { code: target === 'B-02-01-A' ? 'B-02-02-A' : 'B-02-01-A', label: 'inna półka' }]} />
 			</section>
 
-			<div class="grid grid-cols-2 gap-2">
-				<Button disabled={busy} onclick={openAlternatives}><Shuffle class="size-4" />Inna lokalizacja</Button>
-				<Button disabled={busy || o.queue.length < 2} onclick={skip}><SkipForward class="size-4" />Pomiń</Button>
-			</div>
+			<Button disabled={busy || o.queue.length < 2} onclick={skip}><SkipForward class="size-4" />Pomiń pozycję</Button>
 		{:else}
 			<section class="flex flex-col items-center gap-2 rounded-3xl bg-surface p-8 text-center ring-1 ring-line">
 				<CircleCheckBig class="size-14 text-ok" />
