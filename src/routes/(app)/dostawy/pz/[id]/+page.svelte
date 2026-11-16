@@ -181,7 +181,8 @@
 
 </script>
 
-<PageHeader title={r.number} titleNote={STATUS[r.statusKey]?.[0]} subtitle={r.supplier.name} back={!done ? '/dostawy/do-przyjecia' : r.statusKey === 'PZ_DONE' ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
+<!-- PZ istnieje dla magazyniera dopiero po rozładunku – wcześniej ekran opisuje awizację -->
+<PageHeader title={done ? r.number : r.advice.number} titleNote={done ? STATUS[r.statusKey]?.[0] : r.status === 'AWAITING_APPROVAL' ? 'Czeka na akceptację' : 'Rozładunek'} subtitle={r.supplier.name} back={!done ? '/dostawy/do-przyjecia' : r.statusKey === 'PZ_DONE' ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
 
 <div class="flex flex-col gap-3 p-3 {done ? '' : 'pb-28'}">
 	<!-- rozładunek: dane awizacji, dokumenty i nośniki; po rozładunku już niepotrzebne -->
@@ -192,8 +193,7 @@
 				<ProductFlags flags={r.flags} size="sm" />
 			</div>
 			<dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-				<div><dt class="text-xs text-muted">Awizacja</dt><dd class="font-mono font-semibold">{r.advice.number}</dd></div>
-				<div><dt class="text-xs text-muted">Okno</dt><dd class="font-semibold">{fmtDate(r.advice.date)} {r.advice.slotFrom}–{r.advice.slotTo}</dd></div>
+				<div class="col-span-2"><dt class="text-xs text-muted">Okno</dt><dd class="font-semibold">{fmtDate(r.advice.date)} {r.advice.slotFrom}–{r.advice.slotTo}</dd></div>
 				<div class="col-span-2"><dt class="text-xs text-muted">Zamówienia zakupu</dt><dd class="font-mono font-semibold">{r.purchaseOrders.map((p) => p.number).join(', ')}</dd></div>
 				<div class="col-span-2"><dt class="text-xs text-muted">Auto</dt><dd class="flex items-center gap-1.5 font-semibold"><Truck class="size-4 text-muted" />{r.advice.vehicle.plate} · {r.advice.vehicle.driver}</dd></div>
 			</dl>
@@ -210,7 +210,7 @@
 		</section>
 	{/if}
 
-	{#if !done}<ReceiptDocuments receiptId={r.id} number={r.number} documents={r.documents} />{/if}
+	{#if !done}<ReceiptDocuments receiptId={r.id} number={r.advice.number} documents={r.documents} />{/if}
 
 	{#if done}
 		<!-- po rozładunku: zlecenie MWS, alokacja, etykiety -->
@@ -303,7 +303,7 @@
 
 
 <!-- podsumowanie przed zamknięciem -->
-<Sheet bind:open={closeOpen} title="Zakończyć rozładunek?" description="{r.number} · {r.supplier.name}">
+<Sheet bind:open={closeOpen} title="Zakończyć rozładunek?" description="{r.advice.number} · {r.supplier.name}">
 	{#if r.warnings.length}
 		<ul class="mb-3 flex flex-col gap-2">
 			{#each r.warnings as w (w)}<li class="flex gap-3 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />{w}</li>{/each}
@@ -325,7 +325,7 @@
 	{/snippet}
 </Sheet>
 
-<SupervisorSheet bind:open={approvalOpen} title="Zatwierdzenie różnicy nośników" description="{r.number} · {generateMws ? 'ze zleceniem MWS' : 'bez zlecenia MWS'}" onConfirm={approve}>
+<SupervisorSheet bind:open={approvalOpen} title="Zatwierdzenie różnicy nośników" description="{r.advice.number} · {generateMws ? 'ze zleceniem MWS' : 'bez zlecenia MWS'}" onConfirm={approve}>
 	<p class="rounded-xl border border-line px-3 py-2.5 text-sm">Przyjęto <b>{r.carriers.received}</b> {plural(r.carriers.received ?? 0, 'nośnik', 'nośniki', 'nośników')}, awizowano <b>{r.carriers.advised}</b> <span class="font-mono font-bold text-warn">({fmtDiff(r.carriers.diff ?? 0)})</span></p>
 	{#snippet extra()}
 		{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Przełożonego nie ma – wyślij do akceptacji</Button>{/if}
@@ -340,7 +340,7 @@
 		{#if phase === 'generating'}
 			<div class="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
 				<LoaderCircle class="size-14 animate-spin text-task" />
-				<p class="text-xl font-extrabold">Kończę rozładunek {r.number}</p>
+				<p class="text-xl font-extrabold">Kończę rozładunek {r.advice.number}</p>
 				<p class="text-white/70">{generateMws ? 'Impuls generuje zlecenie magazynowe MWS…' : 'Przekazuję PZ do Impulsa (bez zlecenia MWS)…'}</p>
 			</div>
 		{:else if result}

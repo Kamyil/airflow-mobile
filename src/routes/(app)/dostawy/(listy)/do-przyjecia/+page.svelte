@@ -76,7 +76,7 @@
 		busy = true;
 		try {
 			let { receiptId, created } = await startReceipt(detail.id);
-			if (created) toast.ok('Utworzono PZ', `${detail.supplier.name} · ${detail.dock.name}`);
+			if (created) toast.ok('Rozpoczęto rozładunek', `${detail.supplier.name} · ${detail.dock.name}`);
 			detailOpen = false;
 			await goto(`/dostawy/pz/${receiptId}`);
 		} catch (e) {
@@ -179,13 +179,13 @@
 			{/each}
 		</ul>
 		{#if detail.partiallyReceived && !detail.openReceipt}
-			<p class="mt-3 flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Częściowo przyjęte ({detail.receipts.map((r) => r.number).join(', ')}). Nowa PZ obejmie tylko pozostałe {detail.remainingQty} szt.</p>
+			<p class="mt-3 flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Częściowo przyjęte ({detail.receipts.map((r) => r.number).join(', ')}). Rozładunek obejmie tylko pozostałe {detail.remainingQty} szt.</p>
 		{/if}
 	{/if}
 	{#snippet footer()}
 		{#if detail}
 			<Button variant="task" size="lg" loading={busy} onclick={start}>
-				{detail.openReceipt ? `Kontynuuj ${detail.openReceipt.number}` : 'Rozpocznij przyjęcie (utwórz PZ)'}<ArrowRight class="size-5" />
+				{detail.openReceipt ? 'Kontynuuj rozładunek' : 'Rozpocznij rozładunek'}<ArrowRight class="size-5" />
 			</Button>
 		{/if}
 	{/snippet}
