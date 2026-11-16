@@ -1,5 +1,5 @@
 import { find } from '$lib/mock/domain';
-import { addStock, allocationDetailDTO, allocationSummaryDTO, placedQty, takeStock } from '$lib/mock/warehouse';
+import { addStock, allocationDetailDTO, allocationReady, allocationSummaryDTO, placedQty, takeStock } from '$lib/mock/warehouse';
 import type { AllocationDetailDTO, AllocationSummaryDTO, Db } from '$lib/types';
 import { ApiError, mutate, now, query, who } from './core';
 
@@ -13,6 +13,7 @@ export function listAllocations(f: { status: 'OPEN' | 'DONE'; warehouseId?: stri
 	return query((db) =>
 		db.allocationOrders
 			.filter((o) => (f.status === 'DONE' ? o.doneAt : !o.doneAt))
+			.filter((o) => allocationReady(db, o))
 			.filter((o) => !f.warehouseId || o.warehouseId === f.warehouseId)
 			.map((o) => allocationSummaryDTO(db, o))
 			.sort((a, b) => (f.status === 'DONE' ? b.doneAt!.localeCompare(a.doneAt!) : a.createdAt.localeCompare(b.createdAt)))

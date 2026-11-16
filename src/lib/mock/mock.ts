@@ -119,12 +119,9 @@ function buildStock(): StockItem[] {
 		['P-01-02-A', 'p13', 25],
 		['P-02-01-A', 'p12', 10, 'FL2605-31', day(400)],
 		['P-02-02-B', 'p05', 90],
-		// miejsca odstawcze – towar przyjęty, czeka na alokację (ZM/0041, ZM/0042)
+		// miejsca odstawcze – towar przyjęty, czeka na alokację (ZM/0041); PZ/0124 jeszcze nieprzyjęta, więc bez stanu
 		['ODST-D1', 'p03', 48, 'SL2610-02', day(360)],
-		['ODST-D1', 'p02', 36, 'PN2610-19', day(330)],
-		['ODST-D2', 'p07', 40],
-		['ODST-D2', 'p06', 20],
-		['ODST-D2', 'p27', 12]
+		['ODST-D1', 'p02', 36, 'PN2610-19', day(330)]
 	];
 	return rows.map(([location, productId, qty, batch, expiry, serials], i) => ({
 		id: `st-${String(i + 1).padStart(3, '0')}`,
@@ -316,7 +313,8 @@ export function createSeed(): Db {
 					{ id: 'pz-0121-2', purchaseOrderId: 'po02', poLineId: 'po02-2', productId: 'p09', expectedQty: 50, receivedQty: 50, batches: [], serials: [], note: null, checkedAt: at(-1, '10:41') },
 					{ id: 'pz-0121-3', purchaseOrderId: 'po02', poLineId: 'po02-3', productId: 'p17', expectedQty: 24, receivedQty: 24, batches: [], serials: [], note: null, checkedAt: at(-1, '10:55') }
 				],
-				approval: null, allocationOrderId: 'zm-0040', labelsPrintedAt: at(-1, '11:22'), mwsSkipped: false, carriers: { pallets: 4, parcels: 0 }, documents: []
+				approval: null, allocationOrderId: 'zm-0040', labelsPrintedAt: at(-1, '11:22'), mwsSkipped: false, carriers: { pallets: 4, parcels: 0 }, documents: [],
+				acceptedAt: at(-1, '11:18'), acceptedBy: 'Anna Nowak'
 			},
 			{
 				id: 'pz-0122', number: `PZ/${YM()}/0122`, adviceId: 'aw-a1', warehouseId: 'mg01', dockId: 'd1', status: 'DONE',
@@ -327,17 +325,18 @@ export function createSeed(): Db {
 					{ id: 'pz-0122-3', purchaseOrderId: 'po01', poLineId: 'po01-3', productId: 'p03', expectedQty: 48, receivedQty: 48, batches: [{ batch: 'SL2610-02', expiry: day(360), qty: 48 }], serials: [], note: null, checkedAt: at(-1, '08:20') }
 				],
 				approval: { by: 'Piotr Wiśniewski', at: at(-1, '08:38'), note: 'Uszkodzenia zgłoszone dostawcy, reklamacja RK/0091' },
-				allocationOrderId: 'zm-0041', labelsPrintedAt: null, mwsSkipped: false, carriers: { pallets: 6, parcels: 0 }, documents: []
+				allocationOrderId: 'zm-0041', labelsPrintedAt: null, mwsSkipped: false, carriers: { pallets: 6, parcels: 0 }, documents: [],
+				acceptedAt: at(-1, '08:39'), acceptedBy: 'Jan Kowalski'
 			},
 			{
 				id: 'pz-0124', number: `PZ/${YM()}/0124`, adviceId: 'aw-b1', warehouseId: 'mg01', dockId: 'd2', status: 'DONE',
 				createdAt: at(0, '06:10'), createdBy: 'Marek Zieliński', closedAt: at(0, '06:55'), closedBy: 'Marek Zieliński',
 				lines: [
-					{ id: 'pz-0124-1', purchaseOrderId: 'po03', poLineId: 'po03-1', productId: 'p07', expectedQty: 60, receivedQty: 40, batches: [], serials: [], note: null, checkedAt: at(0, '06:25') },
-					{ id: 'pz-0124-2', purchaseOrderId: 'po03', poLineId: 'po03-2', productId: 'p06', expectedQty: 30, receivedQty: 20, batches: [], serials: [], note: null, checkedAt: at(0, '06:38') },
-					{ id: 'pz-0124-3', purchaseOrderId: 'po03', poLineId: 'po03-3', productId: 'p27', expectedQty: 12, receivedQty: 12, batches: [], serials: [], note: null, checkedAt: at(0, '06:50') }
+					{ id: 'pz-0124-1', purchaseOrderId: 'po03', poLineId: 'po03-1', productId: 'p07', expectedQty: 60, receivedQty: 0, batches: [], serials: [], note: null, checkedAt: null },
+					{ id: 'pz-0124-2', purchaseOrderId: 'po03', poLineId: 'po03-2', productId: 'p06', expectedQty: 30, receivedQty: 0, batches: [], serials: [], note: null, checkedAt: null },
+					{ id: 'pz-0124-3', purchaseOrderId: 'po03', poLineId: 'po03-3', productId: 'p27', expectedQty: 12, receivedQty: 0, batches: [], serials: [], note: null, checkedAt: null }
 				],
-				approval: { by: 'Piotr Wiśniewski', at: at(0, '06:54'), note: 'Reszta w drugim aucie – ZZ zostaje otwarte' },
+				approval: null,
 				allocationOrderId: 'zm-0042', labelsPrintedAt: null, mwsSkipped: false, carriers: { pallets: 7, parcels: 0 }, documents: []
 			},
 			{
@@ -396,9 +395,9 @@ export function createSeed(): Db {
 			{
 				id: 'zm-0042', number: `ZM/${Y()}/0042`, receiptId: 'pz-0124', warehouseId: 'mg01', createdAt: at(0, '06:55'), startedAt: null, doneAt: null, deferredLineIds: [],
 				lines: [
-					{ id: 'zm-0042-1', productId: 'p07', qty: 40, batch: null, expiry: null, serials: [], fromLocation: 'ODST-D2', suggestedLocation: 'B-02-01-B', placements: [] },
+					{ id: 'zm-0042-1', productId: 'p07', qty: 60, batch: null, expiry: null, serials: [], fromLocation: 'ODST-D2', suggestedLocation: 'B-02-01-B', placements: [] },
 					{ id: 'zm-0042-2', productId: 'p27', qty: 12, batch: null, expiry: null, serials: [], fromLocation: 'ODST-D2', suggestedLocation: 'B-02-02-B', placements: [] },
-					{ id: 'zm-0042-3', productId: 'p06', qty: 20, batch: null, expiry: null, serials: [], fromLocation: 'ODST-D2', suggestedLocation: 'B-02-03-B', placements: [] }
+					{ id: 'zm-0042-3', productId: 'p06', qty: 30, batch: null, expiry: null, serials: [], fromLocation: 'ODST-D2', suggestedLocation: 'B-02-03-B', placements: [] }
 				]
 			}
 		],

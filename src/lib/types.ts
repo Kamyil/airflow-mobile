@@ -498,6 +498,11 @@ export interface Receipt {
 	labelsPrintedAt: string | null;
 	/** Zdjęcia dokumentów dostawy (WZ, CMR…) – na poziomie PZ, nie pozycji */
 	documents: ReceiptDocument[];
+	/** Przyjęcie na magazyn (po rozładunku): pozycje sprawdzone, PZ -> „Przyjęte”, ZM trafia do Alokacji */
+	acceptedAt?: string | null;
+	acceptedBy?: string | null;
+	/** Zatwierdzenie rozbieżności ilości przy przyjęciu */
+	acceptApproval?: Approval | null;
 }
 
 export type ReceiptDocumentKind = 'WZ' | 'CMR' | 'FAKTURA' | 'INNY';
@@ -723,6 +728,9 @@ export interface ReceiptDTO {
 	 * Status do wyświetlenia. Zakończenie przyjęcia nie zamyka PZ – jest "Do realizacji";
 	 * PZ zamyka się sama (w makiecie: gdy towar ze zlecenia MWS jest na półkach).
 	 */
+	acceptedAt: string | null;
+	acceptedBy: string | null;
+	acceptApproval: Approval | null;
 	statusKey: ReceiptStatus | 'PZ_TODO' | 'PZ_DONE';
 	/** Nośniki: awizowane (jeśli dostawca podał) vs przyjęte przy rozładunku */
 	carriers: {

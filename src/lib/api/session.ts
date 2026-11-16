@@ -1,6 +1,6 @@
 import { reset } from '$lib/mock/db';
 import { dispatchGroups } from '$lib/mock/domain';
-import { adviceDTO, receiptDTO } from '$lib/mock/warehouse';
+import { adviceDTO, allocationReady, receiptDTO } from '$lib/mock/warehouse';
 import { setOperator, type SessionOperator } from '$lib/session';
 import type { ContextDTO, Db, Operator } from '$lib/types';
 import { ApiError, latency, query } from './core';
@@ -17,7 +17,7 @@ export function getContext(): Promise<ContextDTO> {
 				.map((a) => adviceDTO(db, a))
 				.filter((a) => a.openReceipt || (!a.fullyReceived && a.date === today())).length,
 			receiptsInProgress: db.receipts.filter((r) => r.status === 'DONE' && receiptDTO(db, r).statusKey === 'PZ_TODO').length,
-			allocation: db.allocationOrders.filter((o) => !o.doneAt).length,
+			allocation: db.allocationOrders.filter((o) => !o.doneAt && allocationReady(db, o)).length,
 			transfers: db.transfers.filter((t) => t.status !== 'DONE').length,
 			picking: db.pickingOrders.filter((po) => !po.releasedAt).length,
 			dispatch: dispatchGroups(db).reduce((n, g) => n + g.orders.length, 0),

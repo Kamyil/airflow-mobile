@@ -7,8 +7,8 @@
 		IN_PROGRESS: ['Wystawione', 'task'],
 		AWAITING_APPROVAL: ['Czeka na akceptację', 'warn'],
 		DONE: ['Zrealizowana', 'ok'],
-		PZ_TODO: ['Do realizacji', 'info'],
-		PZ_DONE: ['Zrealizowana', 'ok'],
+		PZ_TODO: ['W trakcie przyjęcia', 'task'],
+		PZ_DONE: ['Przyjęta', 'ok'],
 		// MM / ZM / INW
 		DRAFT: ['Szkic', 'neutral'],
 		TODO: ['Do realizacji', 'info'],

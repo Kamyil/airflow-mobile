@@ -183,7 +183,11 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 			: null,
 		carriers: { advised, received, diff: carrierDiff },
 		needsApproval: r.status !== 'DONE' && carrierDiff !== null && carrierDiff !== 0,
-		statusKey: r.status !== 'DONE' ? r.status : alloc && allocationStatus(alloc) === 'DONE' ? 'PZ_DONE' : 'PZ_TODO',
+		acceptedAt: r.acceptedAt ?? null,
+		acceptedBy: r.acceptedBy ?? null,
+		acceptApproval: r.acceptApproval ?? null,
+		// po rozładunku: W trakcie (przyjmowanie pozycji na magazyn) -> Przyjęta
+		statusKey: r.status !== 'DONE' ? r.status : r.acceptedAt ? 'PZ_DONE' : 'PZ_TODO',
 		mwsSkipped: r.mwsSkipped,
 		pendingMws: r.pendingMws ?? null,
 		labelsPrintedAt: r.labelsPrintedAt,
@@ -374,4 +378,10 @@ export function inventoryDTO(db: Db, inv: InventoryCount): InventoryDTO {
 				.map((i) => ({ location: l.code, product: i.product, batch: i.batch, systemQty: i.systemQty, countedQty: i.countedQty!, diff: i.diff! }))
 		)
 	};
+}
+
+/** ZM do alokacji dopiero, gdy towar z PZ jest przyjęty na magazyn (pozycje sprawdzone) */
+export function allocationReady(db: Db, o: AllocationOrder): boolean {
+	let r = o.receiptId ? db.receipts.find((x) => x.id === o.receiptId) : null;
+	return !r || !!r.acceptedAt;
 }

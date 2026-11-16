@@ -6,6 +6,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import { fmtDateTime } from '$lib/format';
 	import Badge from '$lib/components/Badge.svelte';
+	import Progress from '$lib/components/Progress.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import ProductFlags from '$lib/components/ProductFlags.svelte';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -49,10 +50,15 @@
 		<Badge>{r.warehouse.code} · {r.dock.name}</Badge>
 		<ProductFlags flags={r.flags} size="sm" />
 	</div>
-	<p class="mt-2 text-xs text-muted">Rozładował(a) {r.closedBy} · {fmtDateTime(r.closedAt!)}</p>
+	{#if r.acceptedAt}
+		<p class="mt-2 text-xs text-muted">Przyjął(a) {r.acceptedBy} · {fmtDateTime(r.acceptedAt)}</p>
+	{:else}
+		<div class="mt-3"><Progress value={r.progress.linesChecked} max={r.progress.lines} label="{r.progress.linesChecked}/{r.progress.lines} poz. sprawdzonych" /></div>
+		<p class="mt-2 text-xs text-muted">Rozładował(a) {r.closedBy} · {fmtDateTime(r.closedAt!)}</p>
+	{/if}
 	<div class="mt-2 flex flex-wrap gap-1.5">
 		<!-- zlecenie MWS: zawsze widoczne, czy jest wygenerowane -->
-		{#if r.allocation}<Badge tone={r.allocation.status === 'DONE' ? 'ok' : 'task'}><ArrowDownToLine />MWS {r.allocation.number} · {ALLOC[r.allocation.status]}</Badge>
+		{#if r.allocation}<Badge tone={r.acceptedAt && r.allocation.status === 'DONE' ? 'ok' : 'neutral'}><ArrowDownToLine />MWS {r.allocation.number}{r.acceptedAt ? ` · ${ALLOC[r.allocation.status]}` : ''}</Badge>
 		{:else if r.mwsSkipped}<Badge tone="warn"><Ban />Bez zlecenia MWS</Badge>
 		{:else}<Badge><CircleDashed />MWS: nie wygenerowano</Badge>{/if}
 		{#if r.approval}<Badge tone="info"><ShieldCheck />Rozbieżności zatwierdzone</Badge>{/if}

@@ -1,6 +1,6 @@
 import { find } from '$lib/mock/domain';
 import { addStock, adviceDTO, openReceiptOf, receiptDTO, receivedOnPoLine, suggestLocation } from '$lib/mock/warehouse';
-import type { AdviceDetailDTO, AdviceDTO, Db, GoodsLabelDTO, Receipt, ReceiptDocumentKind, ReceiptDTO, ReceivedCarriers } from '$lib/types';
+import type { AdviceDetailDTO, AdviceDTO, BatchEntry, Db, GoodsLabelDTO, Receipt, ReceiptDocumentKind, ReceiptDTO, ReceivedCarriers } from '$lib/types';
 import { ApiError, latency, mutate, now, query, requireOnline, who } from './core';
 import { assertSupervisor } from './session';
 
@@ -114,11 +114,11 @@ export function listReceipts(f: ReceiptFilter): Promise<ReceiptDTO[]> {
 			.filter((r) => r.status === 'DONE')
 			.filter((r) => !f.warehouseId || r.warehouseId === f.warehouseId)
 			.filter((r) => !f.dockId || r.dockId === f.dockId)
-			.filter((r) => !f.date || (r.closedAt ?? r.createdAt).startsWith(f.date))
+			.filter((r) => !f.date || (r.acceptedAt ?? r.closedAt ?? r.createdAt).startsWith(f.date))
 			.map((r) => receiptDTO(db, r))
 			.filter((r) => r.statusKey === (f.status === 'DONE' ? 'PZ_DONE' : 'PZ_TODO'))
 			.filter((r) => match(f.q, r.number, r.supplier.name, r.advice.number, r.advice.vehicle.plate, ...r.purchaseOrders.map((p) => p.number)))
-			.sort((a, b) => (b.closedAt ?? b.createdAt).localeCompare(a.closedAt ?? a.createdAt))
+			.sort((a, b) => (b.acceptedAt ?? b.closedAt ?? b.createdAt).localeCompare(a.acceptedAt ?? a.closedAt ?? a.createdAt))
 	);
 }
 
@@ -180,14 +180,7 @@ export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions)
 			r.approval = { by: supervisor.name, at: now(), note: opts.approval.note.trim() };
 		}
 
-		// bez wprowadzania produktów: PZ przyjmuje ilości z dokumentu (weryfikacja ilości poza rozładunkiem)
-		for (let l of r.lines) {
-			l.receivedQty = l.expectedQty;
-			l.checkedAt ??= now();
-		}
-
-		let dock = find(db.docks, r.dockId);
-		for (let part of receivedParts(db, r)) addStock(db, { warehouseId: r.warehouseId, location: dock.stagingLocation, ...part });
+		// pozycje (ilości, partie, SN) sprawdza się dopiero przy przyjęciu na magazyn – zakładka „W trakcie”
 
 		r.status = 'DONE';
 		delete r.pendingMws;
@@ -224,13 +217,18 @@ function receivedParts(db: Db, r: Receipt) {
 		});
 }
 
+/** Ilości z dokumentu – ZM wygenerowane przy rozładunku, zanim pozycje zostaną sprawdzone */
+function documentParts(r: Receipt) {
+	return r.lines.map((l) => ({ productId: l.productId, qty: l.expectedQty, batch: null, expiry: null, serials: [] as string[] }));
+}
+
 /** Impuls: "generuj zlecenie magazynowe MWS" – z miejsca odstawczego na półki */
 function createAllocationOrder(db: Db, r: Receipt): { allocationOrderId: string; number: string } {
 	let dock = find(db.docks, r.dockId);
 	let seq = db.counters.allocation++;
 	let id = `zm-${String(seq).padStart(4, '0')}`;
 	let number = `ZM/${now().slice(0, 4)}/${String(seq).padStart(4, '0')}`;
-	let lines = receivedParts(db, r).map((l, i) => ({
+	let lines = (r.acceptedAt ? receivedParts(db, r) : documentParts(r)).map((l, i) => ({
 		id: `${id}-${i + 1}`,
 		...l,
 		fromLocation: dock.stagingLocation,
@@ -297,7 +295,7 @@ export function removeReceiptDocument(receiptId: string, documentId: string): Pr
 export function printReceiptLabels(receiptId: string): Promise<GoodsLabelDTO[]> {
 	return mutate('Druk etykiet PZ', (db) => {
 		let r = find(db.receipts, receiptId);
-		if (r.status !== 'DONE') throw new ApiError('VALIDATION', 'Etykiety drukuje się po zakończeniu rozładunku');
+		if (!r.acceptedAt) throw new ApiError('VALIDATION', 'Etykiety drukuje się po przyjęciu pozycji');
 		let supplier = find(db.suppliers, find(db.advices, r.adviceId).supplierId).name;
 		let location = find(db.docks, r.dockId).stagingLocation;
 		r.labelsPrintedAt = now();
@@ -313,3 +311,100 @@ export function printReceiptLabels(receiptId: string): Promise<GoodsLabelDTO[]> 
 	});
 }
 
+
+// --- przyjęcie na magazyn (po rozładunku, zakładka „W trakcie”) ---------------------
+
+function acceptableReceipt(db: Db, id: string): Receipt {
+	let r = find(db.receipts, id);
+	if (r.status !== 'DONE') throw new ApiError('VALIDATION', 'Najpierw zakończ rozładunek');
+	if (r.acceptedAt) throw new ApiError('VALIDATION', `${r.number} jest już przyjęta`);
+	return r;
+}
+
+/** Skan EAN / indeksu na PZ – zwraca pozycję, której dotyczy */
+export function scanReceiptProduct(receiptId: string, code: string): Promise<{ lineId: string }> {
+	return query((db) => {
+		let r = find(db.receipts, receiptId);
+		let c = code.trim().toUpperCase();
+		let lines = r.lines.filter((l) => {
+			let p = find(db.products, l.productId);
+			return p.ean === c || p.sku.toUpperCase() === c;
+		});
+		if (!lines.length) throw new ApiError('VALIDATION', `Produkt ${c} nie występuje na tej dostawie`, ['Sprawdź, czy towar nie przyjechał omyłkowo – odłóż go na bok i zgłoś przełożonemu.']);
+		// gdy ten sam produkt jest na kilku ZZ – pierwsza niesprawdzona pozycja
+		return { lineId: (lines.find((l) => !l.checkedAt) ?? lines[0]).id };
+	});
+}
+
+export interface ReceiptLineInput {
+	receivedQty: number;
+	batches: BatchEntry[];
+	serials: string[];
+	note: string | null;
+}
+
+export function updateReceiptLine(receiptId: string, lineId: string, input: ReceiptLineInput): Promise<void> {
+	return mutate('Przyjęcie pozycji PZ', (db) => {
+		let r = acceptableReceipt(db, receiptId);
+		let line = r.lines.find((l) => l.id === lineId);
+		if (!line) throw new ApiError('NOT_FOUND', 'Nie znaleziono pozycji');
+		let p = find(db.products, line.productId);
+		let errors: string[] = [];
+
+		if (!(input.receivedQty >= 0) || !Number.isInteger(input.receivedQty)) errors.push('Ilość musi być liczbą całkowitą ≥ 0');
+		let batches = p.tracking === 'BATCH' ? input.batches.filter((b) => b.qty > 0) : [];
+		for (let b of batches) if (!b.batch.trim()) errors.push('Podaj numer serii dla każdej partii');
+		let serials = p.tracking === 'SERIAL' ? input.serials.map((s) => s.trim().toUpperCase()).filter(Boolean) : [];
+		if (new Set(serials).size !== serials.length) errors.push('Numery seryjne nie mogą się powtarzać');
+		let elsewhere = new Set(db.stock.flatMap((s) => (s.productId === p.id ? s.serials : [])));
+		let dup = serials.filter((s) => elsewhere.has(s));
+		if (dup.length) errors.push(`Numer seryjny jest już na stanie: ${dup.join(', ')}`);
+		if (errors.length) throw new ApiError('VALIDATION', 'Popraw dane pozycji', errors);
+
+		line.receivedQty = input.receivedQty;
+		line.batches = batches.map((b) => ({ ...b, batch: b.batch.trim().toUpperCase() }));
+		line.serials = serials;
+		line.note = input.note?.trim() || null;
+		line.checkedAt = now();
+		r.acceptApproval = null;
+	});
+}
+
+/**
+ * „Zakończ przyjęcie”: wszystkie pozycje sprawdzone -> towar na stanie (miejsce odstawcze DOKu),
+ * ZM dostaje sprawdzone ilości / partie / SN i trafia do Alokacji, PZ -> „Przyjęte”.
+ * Rozbieżności ilości wymagają PIN-u przełożonego.
+ */
+export function acceptReceipt(receiptId: string, approval?: { pin: string; note: string }): Promise<void> {
+	return mutate('Zakończenie przyjęcia PZ', (db) => {
+		let r = acceptableReceipt(db, receiptId);
+		let dto = receiptDTO(db, r);
+		let errors = [
+			...dto.lines.filter((l) => !l.checked).map((l) => `${l.product.sku} – pozycja niesprawdzona`),
+			...dto.lines.filter((l) => l.trackingMissing).map((l) => `${l.product.sku} – ${l.trackingMissing}`)
+		];
+		if (errors.length) throw new ApiError('VALIDATION', `Nie można zakończyć przyjęcia ${r.number}`, errors);
+		if (dto.discrepancies.length) {
+			if (!approval) throw new ApiError('APPROVAL_REQUIRED', 'Rozbieżności wymagają zatwierdzenia przełożonego');
+			let supervisor = assertSupervisor(db, approval.pin);
+			r.acceptApproval = { by: supervisor.name, at: now(), note: approval.note.trim() };
+		}
+
+		let dock = find(db.docks, r.dockId);
+		for (let part of receivedParts(db, r)) addStock(db, { warehouseId: r.warehouseId, location: dock.stagingLocation, ...part });
+		r.acceptedAt = now();
+		r.acceptedBy = who();
+
+		// ZM wygenerowane przy rozładunku (z dokumentu) dostaje sprawdzone ilości
+		let zm = r.allocationOrderId ? db.allocationOrders.find((o) => o.id === r.allocationOrderId) : null;
+		if (zm && !zm.startedAt) {
+			zm.lines = receivedParts(db, r).map((l, i) => ({
+				id: `${zm.id}-${i + 1}`,
+				...l,
+				fromLocation: dock.stagingLocation,
+				suggestedLocation: suggestLocation(db, r.warehouseId, l.productId),
+				placements: []
+			}));
+		}
+	});
+}
