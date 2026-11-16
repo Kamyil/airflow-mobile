@@ -139,10 +139,10 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 	let lines = r.lines.map((l) => lineDTO(db, l));
 	let unchecked = lines.filter((l) => !l.checked);
 	let tracking = lines.filter((l) => l.trackingMissing);
+	// niesprawdzone pozycje nie blokują – przy zamknięciu wypadają z PZ i zostają do przyjęcia później
 	let blockers: string[] = [];
-	if (unchecked.length) blockers.push(`Niesprawdzone pozycje: ${unchecked.length}`);
 	for (let l of tracking) blockers.push(`${l.product.sku} – ${l.trackingMissing}`);
-	if (lines.every((l) => l.receivedQty === 0) && !unchecked.length) blockers.push('Nic nie przyjęto – PZ nie może być pusta');
+	if (lines.every((l) => l.receivedQty === 0)) blockers.push('Nic nie przyjęto – sprawdź co najmniej jedną pozycję');
 
 	let alloc = r.allocationOrderId ? find(db.allocationOrders, r.allocationOrderId) : null;
 	let pos = [...new Set(r.lines.map((l) => l.purchaseOrderId))].map((id) => find(db.purchaseOrders, id));

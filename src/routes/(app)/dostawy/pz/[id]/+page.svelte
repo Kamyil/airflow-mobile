@@ -47,6 +47,7 @@
 	let correctingId = $state<string | null>(null);
 	let correctOpen = $state(false);
 	let correcting = $derived(r.lines.find((l) => l.id === correctingId) ?? null);
+	let unchecked = $derived(r.lines.filter((l) => !l.checked));
 
 	function openLine(l: ReceiptLineDTO) {
 		if (done) {
@@ -98,7 +99,7 @@
 	let closeOpen = $state(false);
 	let approvalOpen = $state(false);
 	let phase = $state<'idle' | 'generating' | 'success'>('idle');
-	let result = $state<{ allocationOrderId: string | null; number: string | null } | null>(null);
+	let result = $state<{ allocationOrderId: string | null; number: string | null; deferred?: number } | null>(null);
 	/** Czy po zamknięciu wywołać w Impulsie "generuj zlecenie magazynowe MWS" */
 	let generateMws = $state(true);
 
@@ -332,8 +333,17 @@
 				{/each}
 			</ul>
 			<p class="mt-3 text-xs text-muted">Brakujące ilości zostają na zamówieniu zakupu – można je przyjąć kolejną PZ (np. z drugiego auta).</p>
-		{:else}
+		{:else if !unchecked.length}
 			<p class="flex items-center gap-2 rounded-xl bg-ok-soft p-3 text-sm font-semibold text-ok"><Check class="size-5" />Wszystkie pozycje zgodne z zamówieniem</p>
+		{/if}
+		{#if unchecked.length}
+			<div class="mt-3 rounded-xl bg-info-soft p-3 text-sm text-info">
+				<p class="flex items-center gap-2 font-bold"><Hourglass class="size-4" />Do przyjęcia później ({unchecked.length})</p>
+				<ul class="mt-1 flex flex-col gap-0.5">
+					{#each unchecked as l (l.id)}<li class="flex justify-between gap-3"><span class="truncate">{l.product.name}</span><span class="font-mono font-bold whitespace-nowrap">{l.expectedQty} {l.product.unit}</span></li>{/each}
+				</ul>
+				<p class="mt-1.5 text-xs">Niesprawdzone pozycje nie trafią na tę PZ. Zostają na zamówieniu – awizacja wróci do „Do przyjęcia” i przyjmiesz je kolejną PZ.</p>
+			</div>
 		{/if}
 		<label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 {generateMws ? 'border-ink' : 'border-line'}">
 			<input type="checkbox" bind:checked={generateMws} class="mt-0.5 size-5 shrink-0 accent-ink" />
@@ -348,7 +358,7 @@
 		{#if !r.blockers.length}
 			{#if r.discrepancies.length}
 				<Button variant="primary" size="lg" onclick={() => ((closeOpen = false), (approvalOpen = true))}><ShieldCheck class="size-5" />Potwierdź z przełożonym</Button>
-				{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Przełożonego nie ma – wyślij do akceptacji</Button>{/if}
+				{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Wyślij do akceptacji później</Button>{/if}
 			{:else}
 				<Button variant="ok" size="lg" onclick={() => finish()}><Lock class="size-5" />{generateMws ? 'Zakończ i generuj zlecenie MWS' : 'Zakończ bez zlecenia MWS'}</Button>
 			{/if}
@@ -384,6 +394,7 @@
 				<span class="grid size-20 place-items-center rounded-full bg-ok"><Check class="size-11" strokeWidth={3} /></span>
 				<p class="mt-2 text-2xl font-extrabold">{r.status === 'DONE' && result.number ? 'Zlecenie wygenerowane' : 'Przyjęcie zakończone'}</p>
 				<p class="text-white/70">{r.number} zrealizowana. Towar leży na <b class="text-white">{r.dock.stagingLocation}</b>.</p>
+				{#if result.deferred}<p class="text-sm text-white/70">{result.deferred} {result.deferred === 1 ? 'pozycja czeka' : 'pozycje czekają'} na przyjęcie później – awizacja wróciła do „Do przyjęcia”.</p>{/if}
 				<div class="mt-3 rounded-2xl bg-white/10 px-5 py-3">
 					<p class="text-xs tracking-wide text-white/60 uppercase">Zlecenie magazynowe MWS</p>
 					{#if result.number}

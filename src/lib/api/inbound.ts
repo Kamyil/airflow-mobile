@@ -203,7 +203,7 @@ export interface CloseReceiptOptions {
 }
 
 /** Zamknięcie PZ: towar na miejsce odstawcze DOKu, opcjonalnie Impuls generuje zlecenie MWS (alokacja) */
-export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions): Promise<{ allocationOrderId: string | null; number: string | null }> {
+export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions): Promise<{ allocationOrderId: string | null; number: string | null; deferred: number }> {
 	requireOnline(opts.generateMws ? 'generowanie zlecenia magazynowego MWS w Impulsie' : 'zamknięcie PZ w Impulsie');
 	await latency(opts.generateMws ? 1400 : 700, 500); // wywołanie funkcji Impulsa trwa dłużej
 	return mutate(opts.generateMws ? 'Zamknięcie PZ' : 'Zamknięcie PZ bez zlecenia MWS', (db) => {
@@ -217,6 +217,10 @@ export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions)
 			r.approval = { by: supervisor.name, at: now(), note: opts.approval.note.trim() };
 		}
 
+		// niesprawdzone pozycje wypadają z PZ – zostają na ZZ, awizacja wraca do "Do przyjęcia"
+		let deferred = r.lines.filter((l) => !l.checkedAt).length;
+		r.lines = r.lines.filter((l) => l.checkedAt);
+
 		let dock = find(db.docks, r.dockId);
 		for (let part of receivedParts(db, r)) addStock(db, { warehouseId: r.warehouseId, location: dock.stagingLocation, ...part });
 
@@ -225,9 +229,9 @@ export async function closeReceipt(receiptId: string, opts: CloseReceiptOptions)
 		r.closedBy = who();
 		if (!opts.generateMws) {
 			r.mwsSkipped = true;
-			return { allocationOrderId: null, number: null };
+			return { allocationOrderId: null, number: null, deferred };
 		}
-		return createAllocationOrder(db, r);
+		return { ...createAllocationOrder(db, r), deferred };
 	});
 }
 

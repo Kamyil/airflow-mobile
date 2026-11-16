@@ -132,7 +132,7 @@
 					</div>
 					{#if a.partiallyReceived || a.late}
 						<div class="mt-2 flex flex-wrap gap-1.5">
-							{#if a.partiallyReceived}<Badge tone="info">Doręczenie reszty</Badge>{/if}
+							{#if a.partiallyReceived}<Badge tone="info">Reszta do przyjęcia</Badge>{/if}
 							{#if a.late}<Badge tone="bad"><Clock />Spóźnione</Badge>{/if}
 						</div>
 					{/if}
