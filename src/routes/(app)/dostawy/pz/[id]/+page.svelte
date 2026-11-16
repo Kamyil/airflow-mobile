@@ -106,6 +106,13 @@
 	// „Zakończ przyjęcie”: rozbieżności ilości -> PIN przełożonego
 	let acceptOpen = $state(false);
 	let acceptApprovalOpen = $state(false);
+	/** dokąd po przyjęciu: od razu alokacja tego ZM albo powrót do listy „W trakcie” */
+	let acceptThen = $state<'allocation' | 'back'>('back');
+
+	function startAccept(then: 'allocation' | 'back') {
+		acceptThen = then;
+		acceptOpen = true;
+	}
 
 	async function accept(approval?: { pin: string; note: string }) {
 		busy = true;
@@ -114,7 +121,7 @@
 			acceptOpen = false;
 			acceptApprovalOpen = false;
 			toast.ok(`${r.number} przyjęta`, r.allocation ? `${r.allocation.number} trafiło do Alokacji` : 'Towar na stanie');
-			await invalidateAll();
+			await goto(acceptThen === 'allocation' && r.allocation ? `/alokacja/${r.allocation.id}` : '/dostawy/w-trakcie', { invalidateAll: true });
 		} catch (e) {
 			if (e instanceof ApiError && e.code === 'APPROVAL_REQUIRED') {
 				acceptOpen = false;
@@ -289,7 +296,7 @@
 <!-- PZ istnieje dla magazyniera dopiero po rozładunku – wcześniej ekran opisuje awizację -->
 <PageHeader title={done ? r.number : r.advice.number} titleNote={done ? STATUS[r.statusKey]?.[0] : r.status === 'AWAITING_APPROVAL' ? 'Czeka na akceptację' : 'Rozładunek'} subtitle={r.supplier.name} back={!done ? '/dostawy/do-przyjecia' : accepted ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
 
-<div class="flex flex-col gap-3 p-3 {accepted ? '' : 'pb-28'}">
+<div class="flex flex-col gap-3 p-3 {accepted ? '' : accepting ? 'pb-44' : 'pb-28'}">
 	<!-- rozładunek: dane awizacji, dokumenty i nośniki; po rozładunku już niepotrzebne -->
 	{#if !done}
 		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
@@ -433,8 +440,12 @@
 
 {#if accepting}
 	<div class="pb-safe fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md border-t border-line bg-surface/95 px-3 pt-3 backdrop-blur">
-		<div class="pb-3">
-			<Button variant={unchecked.length ? 'primary' : 'ok'} size="lg" class="w-full" onclick={() => (acceptOpen = true)}><PackageCheck class="size-5" />Zakończ przyjęcie{unchecked.length ? ` (${r.progress.linesChecked}/${r.progress.lines})` : ''}</Button>
+		<div class="flex flex-col gap-2 pb-3">
+			{#if r.allocation}
+				<Button variant={unchecked.length ? 'primary' : 'ok'} size="lg" class="w-full" onclick={() => startAccept('allocation')}><ArrowDownToLine class="size-5" />Zakończ przyjęcie i przejdź do alokacji</Button>
+			{/if}
+			<Button size="lg" class="w-full" onclick={() => startAccept('back')}><PackageCheck class="size-5" />Zakończ przyjęcie i wróć</Button>
+			{#if unchecked.length}<p class="text-center text-xs text-muted">Sprawdzono {r.progress.linesChecked}/{r.progress.lines} poz.</p>{/if}
 		</div>
 	</div>
 {/if}
@@ -470,7 +481,7 @@
 	{/if}
 	{#snippet footer()}
 		{#if !unchecked.length}
-			<Button variant="ok" size="lg" loading={busy} onclick={() => accept()}><PackageCheck class="size-5" />{r.discrepancies.length ? 'Dalej – PIN przełożonego' : 'Zakończ przyjęcie'}</Button>
+			<Button variant="ok" size="lg" loading={busy} onclick={() => accept()}><PackageCheck class="size-5" />{r.discrepancies.length ? 'Dalej – PIN przełożonego' : acceptThen === 'allocation' ? 'Zakończ i przejdź do alokacji' : 'Zakończ i wróć do listy'}</Button>
 		{/if}
 		<Button variant="ghost" size="lg" onclick={() => (acceptOpen = false)}>Wróć</Button>
 	{/snippet}
