@@ -491,8 +491,8 @@ export interface Receipt {
 	allocationOrderId: string | null;
 	/** Zamknięta świadomie bez generowania zlecenia MWS */
 	mwsSkipped: boolean;
-	/** Liczba nośników (palet) przyjętych przy rozładunku – jedyne, co podaje magazynier */
-	carriers?: number | null;
+	/** Nośniki przyjęte przy rozładunku wg typu – jedyne, co podaje magazynier */
+	carriers?: ReceivedCarriers | null;
 	/** Wybór "Generować zlecenie MWS?" zapamiętany przy wysłaniu do akceptacji przełożonego */
 	pendingMws?: boolean;
 	labelsPrintedAt: string | null;
@@ -725,7 +725,13 @@ export interface ReceiptDTO {
 	 */
 	statusKey: ReceiptStatus | 'PZ_TODO' | 'PZ_DONE';
 	/** Nośniki: awizowane (jeśli dostawca podał) vs przyjęte przy rozładunku */
-	carriers: { advised: number | null; received: number | null; diff: number | null };
+	carriers: {
+		/** palety z awizacji (dostawca nie podaje paczek) */
+		advised: number | null;
+		received: ReceivedCarriers | null;
+		/** różnica palet względem awizacji */
+		diff: number | null;
+	};
 	/** Różnica nośników względem awizacji – zakończenie wymaga potwierdzenia przełożonego */
 	needsApproval: boolean;
 	mwsSkipped: boolean;
@@ -851,4 +857,10 @@ export interface DispatchGroupDTO {
 export interface AdviceDetailDTO extends AdviceDTO {
 	/** Pozycje do przyjęcia (pozostałe z ZZ) – flagi KJ/SERIA/SN są per produkt */
 	items: { product: Product; ordered: number; remaining: number; poNumber: string }[];
+}
+
+/** Nośniki zdjęte z auta przy rozładunku */
+export interface ReceivedCarriers {
+	pallets: number;
+	parcels: number;
 }

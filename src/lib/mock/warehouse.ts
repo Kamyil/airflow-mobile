@@ -141,12 +141,13 @@ export function receiptDTO(db: Db, r: Receipt): ReceiptDTO {
 	// Rozładunek: magazynier nie wprowadza produktów – podaje tylko liczbę przyjętych nośników
 	let received = r.carriers ?? null;
 	let advised = advice.pallets;
-	let carrierDiff = received !== null && advised !== null ? received - advised : null;
+	// awizacja podaje tylko palety – z nimi porównujemy
+	let carrierDiff = received !== null && advised !== null ? received.pallets - advised : null;
 	// ostrzeżenia – nie blokują zakończenia rozładunku
 	let warnings: string[] = [];
 	if (r.status !== 'DONE') {
 		if (received === null) warnings.push('Nie podano liczby przyjętych nośników');
-		else if (received < 1) warnings.push('Liczba przyjętych nośników: 0');
+		else if (received.pallets + received.parcels < 1) warnings.push('Liczba przyjętych nośników: 0');
 	}
 
 	let alloc = r.allocationOrderId ? find(db.allocationOrders, r.allocationOrderId) : null;

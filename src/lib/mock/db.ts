@@ -6,7 +6,7 @@ import type { Db } from '$lib/types';
  * żeby cały proces dało się przeklikać i przeżył odświeżenie strony.
  * Dane są generowane względem bieżącej daty – następnego dnia makieta zaczyna od nowa.
  */
-const STORAGE_KEY = 'airflow-mobile-db-v3';
+const STORAGE_KEY = 'airflow-mobile-db-v4';
 
 let db: Db | null = null;
 

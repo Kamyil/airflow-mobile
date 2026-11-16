@@ -66,3 +66,11 @@ export function plural(n: number, one: string, few: string, many: string): strin
 	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
 	return many;
 }
+
+/** "2 palety · 4 paczki" (pomija zera; same zera -> "0 nośników") */
+export function fmtCarriers(c: { pallets: number; parcels: number }): string {
+	let parts = [];
+	if (c.pallets) parts.push(`${c.pallets} ${plural(c.pallets, 'paleta', 'palety', 'palet')}`);
+	if (c.parcels) parts.push(`${c.parcels} ${plural(c.parcels, 'paczka', 'paczki', 'paczek')}`);
+	return parts.join(' · ') || '0 nośników';
+}

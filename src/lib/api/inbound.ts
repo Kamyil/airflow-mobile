@@ -1,6 +1,6 @@
 import { find } from '$lib/mock/domain';
 import { addStock, adviceDTO, openReceiptOf, receiptDTO, receivedOnPoLine, suggestLocation } from '$lib/mock/warehouse';
-import type { AdviceDetailDTO, AdviceDTO, Db, GoodsLabelDTO, Receipt, ReceiptDocumentKind, ReceiptDTO } from '$lib/types';
+import type { AdviceDetailDTO, AdviceDTO, Db, GoodsLabelDTO, Receipt, ReceiptDocumentKind, ReceiptDTO, ReceivedCarriers } from '$lib/types';
 import { ApiError, latency, mutate, now, query, requireOnline, who } from './core';
 import { assertSupervisor } from './session';
 
@@ -136,12 +136,12 @@ function editableReceipt(db: Db, id: string): Receipt {
 	return r;
 }
 
-/** Rozładunek: liczba przyjętych nośników (palet) – jedyne dane wprowadzane przez magazyniera */
-export function setReceiptCarriers(receiptId: string, carriers: number): Promise<void> {
-	return mutate('Liczba nośników na PZ', (db) => {
+/** Rozładunek: przyjęte nośniki (palety, paczki) – jedyne dane wprowadzane przez magazyniera */
+export function setReceiptCarriers(receiptId: string, carriers: ReceivedCarriers): Promise<void> {
+	return mutate('Nośniki na PZ', (db) => {
 		let r = editableReceipt(db, receiptId);
-		if (!Number.isInteger(carriers) || carriers < 0) throw new ApiError('VALIDATION', 'Liczba nośników musi być liczbą całkowitą ≥ 0');
-		r.carriers = carriers;
+		if (![carriers.pallets, carriers.parcels].every((n) => Number.isInteger(n) && n >= 0)) throw new ApiError('VALIDATION', 'Liczba nośników musi być liczbą całkowitą ≥ 0');
+		r.carriers = { pallets: carriers.pallets, parcels: carriers.parcels };
 		if (r.status === 'NEW') r.status = 'IN_PROGRESS';
 	});
 }

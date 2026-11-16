@@ -4,7 +4,7 @@
 	import { ApiError, closeReceipt, generateMwsOrder, printReceiptLabels, requestApproval, setReceiptCarriers, verifySupervisorPin } from '$lib/api';
 	import type { GoodsLabelDTO, ReceiptLineDTO } from '$lib/types';
 	import { toast } from '$lib/toast.svelte';
-	import { fmtDate, fmtDiff, plural } from '$lib/format';
+	import { fmtCarriers, fmtDate, fmtDiff, plural } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import Badge from '$lib/components/Badge.svelte';
@@ -50,14 +50,15 @@
 	}
 
 	// --- rozładunek: liczba przyjętych nośników (jedyne dane od magazyniera) ---
-	let carriers = $state(untrack(() => r.carriers.received ?? r.carriers.advised ?? 1));
-	let carriersDirty = $derived(carriers !== r.carriers.received);
+	// palety i paczki liczone osobno, zapisywane razem
+	let carriers = $state(untrack(() => ({ ...(r.carriers.received ?? { pallets: r.carriers.advised ?? 0, parcels: 0 }) })));
+	let carriersDirty = $derived(carriers.pallets !== r.carriers.received?.pallets || carriers.parcels !== r.carriers.received?.parcels);
 
 	async function saveCarriers() {
 		busy = true;
 		try {
 			await setReceiptCarriers(r.id, carriers);
-			toast.ok(`Zapisano: ${carriers} ${plural(carriers, 'nośnik', 'nośniki', 'nośników')}`);
+			toast.ok(`Zapisano: ${fmtCarriers(carriers)}`);
 			await invalidateAll();
 		} catch (e) {
 			toast.error(e);
@@ -203,7 +204,7 @@
 	{#if r.status === 'AWAITING_APPROVAL'}
 		<section class="rounded-2xl bg-warn-soft p-4 text-warn">
 			<p class="flex items-center gap-2 font-bold"><Hourglass class="size-5" />Czeka na akceptację przełożonego</p>
-			<p class="mt-1 text-sm">Nośniki: przyjęto {r.carriers.received}, awizowano {r.carriers.advised} · {r.pendingMws === false ? 'bez zlecenia MWS' : 'ze zleceniem MWS'}</p>
+			<p class="mt-1 text-sm">Nośniki: przyjęto {r.carriers.received ? fmtCarriers(r.carriers.received) : '—'}, awizowano {r.carriers.advised ?? '—'} pal. · {r.pendingMws === false ? 'bez zlecenia MWS' : 'ze zleceniem MWS'}</p>
 			{#if isSupervisor}
 				<Button variant="primary" class="mt-3 w-full" onclick={approvePending}><ShieldCheck class="size-4" />Zatwierdź rozbieżności</Button>
 			{/if}
@@ -242,16 +243,23 @@
 		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
 			<div class="flex items-center justify-between gap-2">
 				<p class="flex items-center gap-2 text-sm font-bold"><Layers class="size-4 text-muted" />Przyjęte nośniki</p>
-				<span class="text-xs text-muted">{r.carriers.advised !== null ? `awizowano: ${r.carriers.advised}` : 'awizacja bez liczby palet'}</span>
+				<span class="text-xs text-muted">{r.carriers.advised !== null ? `awizowano: ${r.carriers.advised} ${plural(r.carriers.advised, 'paleta', 'palety', 'palet')}` : 'awizacja bez liczby palet'}</span>
 			</div>
-			<div class="mt-3 flex gap-2">
-				<QtyStepper bind:value={carriers} min={0} max={999} unit="szt." size="lg" class="flex-1" />
-				<Button variant="primary" size="lg" class="h-14" disabled={!carriersDirty} loading={busy} onclick={saveCarriers}>Zapisz</Button>
+			<div class="mt-3 flex flex-col gap-2">
+				<div class="flex items-center gap-3">
+					<span class="w-16 shrink-0 text-sm font-bold">Palety</span>
+					<QtyStepper bind:value={carriers.pallets} min={0} max={999} size="lg" class="flex-1" />
+				</div>
+				<div class="flex items-center gap-3">
+					<span class="w-16 shrink-0 text-sm font-bold">Paczki</span>
+					<QtyStepper bind:value={carriers.parcels} min={0} max={999} size="lg" class="flex-1" />
+				</div>
+				<Button variant="primary" size="lg" class="w-full" disabled={!carriersDirty} loading={busy} onclick={saveCarriers}>Zapisz{carriersDirty ? ` – ${fmtCarriers(carriers)}` : ''}</Button>
 			</div>
 			{#if r.carriers.received === null}
-				<p class="mt-2 text-xs text-muted">Policz palety / nośniki zdjęte z auta i zapisz.</p>
+				<p class="mt-2 text-xs text-muted">Policz palety i paczki zdjęte z auta i zapisz.</p>
 			{:else if r.carriers.diff}
-				<p class="mt-2 flex gap-2 rounded-xl bg-warn-soft p-2.5 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica {fmtDiff(r.carriers.diff)} względem awizacji – zakończenie wymaga potwierdzenia przełożonego.</p>
+				<p class="mt-2 flex gap-2 rounded-xl bg-warn-soft p-2.5 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica palet {fmtDiff(r.carriers.diff)} względem awizacji – zakończenie wymaga potwierdzenia przełożonego.</p>
 			{:else if !carriersDirty}
 				<p class="mt-2 flex items-center gap-1.5 text-xs font-bold text-ok"><Check class="size-4" />Zapisano{r.carriers.advised !== null ? ' – zgodne z awizacją' : ''}</p>
 			{/if}
@@ -310,12 +318,12 @@
 		</ul>
 	{/if}
 	<dl class="divide-y divide-line rounded-xl border border-line text-sm">
-		<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><Layers class="size-4" />Nośniki przyjęte</dt><dd class="font-bold">{r.carriers.received ?? '—'}{r.carriers.advised !== null ? ` / awizowano ${r.carriers.advised}` : ''}</dd></div>
+		<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><Layers class="size-4" />Nośniki przyjęte</dt><dd class="text-right font-bold">{r.carriers.received ? fmtCarriers(r.carriers.received) : '—'}{r.carriers.advised !== null ? ` / awizowano ${r.carriers.advised} pal.` : ''}</dd></div>
 		<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="flex items-center gap-2 text-muted"><FileText class="size-4" />Dokumenty</dt><dd class="font-bold {r.documents.length ? '' : 'text-warn'}">{r.documents.length ? `${r.documents.length} zdj.` : 'brak zdjęć'}</dd></div>
 		<div class="flex justify-between gap-4 px-3 py-2.5"><dt class="text-muted">Pozycje z dokumentu</dt><dd class="font-bold">{r.lines.length}</dd></div>
 	</dl>
 	{#if r.needsApproval}
-		<p class="mt-3 flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica nośników {fmtDiff(r.carriers.diff ?? 0)} – po wyborze potrzebny PIN przełożonego.</p>
+		<p class="mt-3 flex gap-2 rounded-xl bg-warn-soft p-3 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica palet {fmtDiff(r.carriers.diff ?? 0)} względem awizacji – po wyborze potrzebny PIN przełożonego.</p>
 	{/if}
 	<p class="mt-3 text-sm text-muted">Towar trafi na miejsce odstawcze <b class="text-ink">{r.dock.stagingLocation}</b>, a PZ będzie do realizacji. Zlecenie MWS (alokacja) można też wygenerować później.</p>
 	{#snippet footer()}
@@ -326,7 +334,7 @@
 </Sheet>
 
 <SupervisorSheet bind:open={approvalOpen} title="Zatwierdzenie różnicy nośników" description="{r.advice.number} · {generateMws ? 'ze zleceniem MWS' : 'bez zlecenia MWS'}" onConfirm={approve}>
-	<p class="rounded-xl border border-line px-3 py-2.5 text-sm">Przyjęto <b>{r.carriers.received}</b> {plural(r.carriers.received ?? 0, 'nośnik', 'nośniki', 'nośników')}, awizowano <b>{r.carriers.advised}</b> <span class="font-mono font-bold text-warn">({fmtDiff(r.carriers.diff ?? 0)})</span></p>
+	<p class="rounded-xl border border-line px-3 py-2.5 text-sm">Przyjęto <b>{r.carriers.received ? fmtCarriers(r.carriers.received) : '—'}</b>, awizowano <b>{r.carriers.advised} {plural(r.carriers.advised ?? 0, 'paleta', 'palety', 'palet')}</b> <span class="font-mono font-bold text-warn">({fmtDiff(r.carriers.diff ?? 0)})</span></p>
 	{#snippet extra()}
 		{#if r.status !== 'AWAITING_APPROVAL'}<Button loading={busy} onclick={sendToApproval}><Send class="size-4" />Przełożonego nie ma – wyślij do akceptacji</Button>{/if}
 	{/snippet}
