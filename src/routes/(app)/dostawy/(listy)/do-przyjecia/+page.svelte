@@ -59,6 +59,8 @@
 	let busy = $state(false);
 
 	async function open(a: AdviceDTO) {
+		// rozładunek w toku – od razu do ekranu rozładunku
+		if (a.openReceipt) return goto(`/dostawy/pz/${a.openReceipt.id}`);
 		detail = null;
 		detailOpen = true;
 		try {
@@ -131,8 +133,9 @@
 						<span class="font-bold text-ink">{a.lines} poz.</span>
 						{#if a.pallets}<span class="flex items-center gap-1"><Layers class="size-3.5" />{a.pallets} {plural(a.pallets, 'paleta', 'palety', 'palet')}</span>{/if}
 					</div>
-					{#if a.partiallyReceived || a.late}
+					{#if a.openReceipt || a.partiallyReceived || a.late}
 						<div class="mt-2 flex flex-wrap gap-1.5">
+							{#if a.openReceipt}<Badge tone={a.openReceipt.status === 'AWAITING_APPROVAL' ? 'warn' : 'task'}><Truck />{a.openReceipt.status === 'AWAITING_APPROVAL' ? 'Rozładunek – czeka na akceptację' : 'Rozładunek w toku'}</Badge>{/if}
 							{#if a.partiallyReceived}<Badge tone="info">Reszta do przyjęcia</Badge>{/if}
 							{#if a.late}<Badge tone="bad"><Clock />Spóźnione</Badge>{/if}
 						</div>

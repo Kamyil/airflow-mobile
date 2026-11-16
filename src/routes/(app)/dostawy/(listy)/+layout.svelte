@@ -5,7 +5,7 @@
 	let { data, children } = $props();
 	let tabs = $derived([
 		{ href: '/dostawy/do-przyjecia', label: 'Do przyjęcia', count: data.context.counts.deliveries },
-		{ href: '/dostawy/w-trakcie', label: 'W trakcie', count: data.context.counts.receiptsOpen },
+		{ href: '/dostawy/w-trakcie', label: 'W trakcie', count: data.context.counts.receiptsInProgress },
 		{ href: '/dostawy/przyjete', label: 'Przyjęte' }
 	]);
 </script>

@@ -12,7 +12,6 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import Tag from '@lucide/svelte/icons/tag';
-	import Layers from '@lucide/svelte/icons/layers';
 	import CircleDashed from '@lucide/svelte/icons/circle-dashed';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import Ban from '@lucide/svelte/icons/ban';
@@ -35,7 +34,7 @@
 	const ALLOC = { TODO: 'do alokacji', IN_PROGRESS: 'alokacja w trakcie', DONE: 'zaalokowane' } as const;
 </script>
 
-<div class="overflow-hidden rounded-2xl border bg-surface {r.status === 'AWAITING_APPROVAL' ? 'border-warn/50' : 'border-line'}">
+<div class="overflow-hidden rounded-2xl border border-line bg-surface">
 <a href="/dostawy/pz/{r.id}" class="block p-4 active:bg-bg">
 	<div class="flex items-start justify-between gap-2">
 		<div class="min-w-0">
@@ -50,17 +49,11 @@
 		<Badge>{r.warehouse.code} · {r.dock.name}</Badge>
 		<ProductFlags flags={r.flags} size="sm" />
 	</div>
-	{#if r.status !== 'DONE'}
-		<p class="mt-3 flex items-center gap-1.5 text-sm {r.carriers.received === null ? 'text-muted' : r.carriers.diff ? 'font-bold text-warn' : 'font-bold'}"><Layers class="size-4" />{r.carriers.received === null ? 'Nośniki: nie podano' : `Nośniki: ${r.carriers.received}`}{r.carriers.advised !== null ? ` / awizowano ${r.carriers.advised}` : ''}</p>
-		<p class="mt-2 text-xs text-muted">Utworzył(a) {r.createdBy} · {fmtDateTime(r.createdAt)}</p>
-	{:else}
-		<p class="mt-2 text-xs text-muted">Przyjął(a) {r.closedBy} · {fmtDateTime(r.closedAt!)}{r.carriers.received !== null ? ` · nośniki: ${r.carriers.received}` : ''}</p>
-	{/if}
+	<p class="mt-2 text-xs text-muted">Rozładował(a) {r.closedBy} · {fmtDateTime(r.closedAt!)}</p>
 	<div class="mt-2 flex flex-wrap gap-1.5">
 		<!-- zlecenie MWS: zawsze widoczne, czy jest wygenerowane -->
 		{#if r.allocation}<Badge tone={r.allocation.status === 'DONE' ? 'ok' : 'task'}><ArrowDownToLine />MWS {r.allocation.number} · {ALLOC[r.allocation.status]}</Badge>
 		{:else if r.mwsSkipped}<Badge tone="warn"><Ban />Bez zlecenia MWS</Badge>
-		{:else if r.status === 'AWAITING_APPROVAL' && r.pendingMws !== null}<Badge><CircleDashed />{r.pendingMws ? 'MWS po akceptacji' : 'Bez MWS (po akceptacji)'}</Badge>
 		{:else}<Badge><CircleDashed />MWS: nie wygenerowano</Badge>{/if}
 		{#if r.approval}<Badge tone="info"><ShieldCheck />Rozbieżności zatwierdzone</Badge>{/if}
 		{#if r.documents.length}<Badge><FileText />Dokumenty: {r.documents.length}</Badge>{/if}

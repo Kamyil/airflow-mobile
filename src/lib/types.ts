@@ -641,7 +641,8 @@ export interface ContextDTO {
 	operator: Db['operator'];
 	counts: {
 		deliveries: number;
-		receiptsOpen: number;
+		/** PZ po rozładunku, towar przenoszony na magazyn */
+		receiptsInProgress: number;
 		allocation: number;
 		transfers: number;
 		picking: number;

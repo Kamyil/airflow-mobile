@@ -4,7 +4,7 @@
 	import { ApiError, closeReceipt, generateMwsOrder, printReceiptLabels, requestApproval, setReceiptCarriers, verifySupervisorPin } from '$lib/api';
 	import type { GoodsLabelDTO, ReceiptLineDTO } from '$lib/types';
 	import { toast } from '$lib/toast.svelte';
-	import { fmtDate, fmtDateTime, fmtDiff, fmtTime, plural } from '$lib/format';
+	import { fmtDate, fmtDiff, plural } from '$lib/format';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import Badge from '$lib/components/Badge.svelte';
@@ -26,7 +26,6 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Hourglass from '@lucide/svelte/icons/hourglass';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-	import CircleCheckBig from '@lucide/svelte/icons/circle-check-big';
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import Printer from '@lucide/svelte/icons/printer';
 	import Lock from '@lucide/svelte/icons/lock';
@@ -182,22 +181,24 @@
 
 </script>
 
-<PageHeader title={r.number} titleNote={STATUS[r.statusKey]?.[0]} subtitle={r.supplier.name} back={done ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
+<PageHeader title={r.number} titleNote={STATUS[r.statusKey]?.[0]} subtitle={r.supplier.name} back={!done ? '/dostawy/do-przyjecia' : r.statusKey === 'PZ_DONE' ? '/dostawy/przyjete' : '/dostawy/w-trakcie'} />
 
 <div class="flex flex-col gap-3 p-3 {done ? '' : 'pb-28'}">
-	<!-- nagłówek dostawy -->
-	<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
-		<div class="flex flex-wrap items-center gap-1.5">
-			<Badge>{r.warehouse.code} · {r.dock.name}</Badge>
-			<ProductFlags flags={r.flags} size="sm" />
-		</div>
-		<dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-			<div><dt class="text-xs text-muted">Awizacja</dt><dd class="font-mono font-semibold">{r.advice.number}</dd></div>
-			<div><dt class="text-xs text-muted">Okno</dt><dd class="font-semibold">{fmtDate(r.advice.date)} {r.advice.slotFrom}–{r.advice.slotTo}</dd></div>
-			<div class="col-span-2"><dt class="text-xs text-muted">Zamówienia zakupu</dt><dd class="font-mono font-semibold">{r.purchaseOrders.map((p) => p.number).join(', ')}</dd></div>
-			<div class="col-span-2"><dt class="text-xs text-muted">Auto</dt><dd class="flex items-center gap-1.5 font-semibold"><Truck class="size-4 text-muted" />{r.advice.vehicle.plate} · {r.advice.vehicle.driver}</dd></div>
-		</dl>
-	</section>
+	<!-- rozładunek: dane awizacji, dokumenty i nośniki; po rozładunku już niepotrzebne -->
+	{#if !done}
+		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
+			<div class="flex flex-wrap items-center gap-1.5">
+				<Badge>{r.warehouse.code} · {r.dock.name}</Badge>
+				<ProductFlags flags={r.flags} size="sm" />
+			</div>
+			<dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+				<div><dt class="text-xs text-muted">Awizacja</dt><dd class="font-mono font-semibold">{r.advice.number}</dd></div>
+				<div><dt class="text-xs text-muted">Okno</dt><dd class="font-semibold">{fmtDate(r.advice.date)} {r.advice.slotFrom}–{r.advice.slotTo}</dd></div>
+				<div class="col-span-2"><dt class="text-xs text-muted">Zamówienia zakupu</dt><dd class="font-mono font-semibold">{r.purchaseOrders.map((p) => p.number).join(', ')}</dd></div>
+				<div class="col-span-2"><dt class="text-xs text-muted">Auto</dt><dd class="flex items-center gap-1.5 font-semibold"><Truck class="size-4 text-muted" />{r.advice.vehicle.plate} · {r.advice.vehicle.driver}</dd></div>
+			</dl>
+		</section>
+	{/if}
 
 	{#if r.status === 'AWAITING_APPROVAL'}
 		<section class="rounded-2xl bg-warn-soft p-4 text-warn">
@@ -209,21 +210,10 @@
 		</section>
 	{/if}
 
-	<ReceiptDocuments receiptId={r.id} number={r.number} documents={r.documents} />
+	{#if !done}<ReceiptDocuments receiptId={r.id} number={r.number} documents={r.documents} />{/if}
 
 	{#if done}
-		<!-- przyjęcie zakończone: PZ do realizacji / zrealizowana, MWS, alokacja, etykiety -->
-		<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
-			<p class="flex items-center gap-2 font-bold text-ok"><CircleCheckBig class="size-5" />Rozładunek zakończony {fmtDateTime(r.closedAt!)}</p>
-			<p class="mt-0.5 text-sm text-muted">Przyjął(a): {r.closedBy}{r.carriers.received !== null ? ` · nośniki: ${r.carriers.received}` : ''}</p>
-			<p class="mt-1 text-sm text-muted">{r.statusKey === 'PZ_DONE' ? 'PZ zrealizowana – towar jest na półkach.' : 'PZ do realizacji – zamknie się automatycznie.'}</p>
-			{#if r.approval}
-				<div class="mt-3 rounded-xl bg-info-soft p-3 text-sm text-info">
-					<p class="flex items-center gap-2 font-bold"><ShieldCheck class="size-4" />Rozbieżności zatwierdził(a) {r.approval.by}, {fmtTime(r.approval.at)}</p>
-					{#if r.approval.note}<p class="mt-0.5">„{r.approval.note}”</p>{/if}
-				</div>
-			{/if}
-		</section>
+		<!-- po rozładunku: zlecenie MWS, alokacja, etykiety -->
 		{#if r.mwsSkipped}
 			<section class="rounded-2xl bg-surface p-4 ring-1 ring-line">
 				<p class="text-xs font-bold tracking-wide text-muted uppercase">Zlecenie magazynowe MWS</p>

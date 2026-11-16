@@ -23,11 +23,11 @@ const match = (q: string | null | undefined, ...values: string[]) => !q?.trim() 
 export function listAdvices(f: AdviceFilter): Promise<AdviceDTO[]> {
 	return query((db) =>
 		db.advices
-			.filter((a) => f.dates.includes(a.date))
 			.filter((a) => !f.warehouseId || a.warehouseId === f.warehouseId)
 			.filter((a) => !f.dockId || a.dockId === f.dockId)
 			.map((a) => adviceDTO(db, a))
-			.filter((a) => !a.fullyReceived && !a.openReceipt)
+			// rozładunek w toku (PZ jeszcze niezamknięta) zostaje w „Do przyjęcia” niezależnie od dnia
+			.filter((a) => a.openReceipt || (!a.fullyReceived && f.dates.includes(a.date)))
 			.filter((a) => match(f.q, a.number, a.supplier.name, a.vehicle.plate, a.vehicle.driver, ...a.purchaseOrders.map((p) => p.number)))
 			.sort((a, b) => a.date.localeCompare(b.date) || a.slotFrom.localeCompare(b.slotFrom) || a.number.localeCompare(b.number))
 	);
@@ -96,8 +96,12 @@ export function startReceipt(adviceId: string): Promise<{ receiptId: string; cre
 	});
 }
 
+/**
+ * Etapy PZ po rozładunku: IN_PROGRESS = towar zdjęty z auta, przenoszony na magazyn (PZ do realizacji),
+ * DONE = PZ zrealizowana. PZ w trakcie rozładunku są widoczne przy awizacji w „Do przyjęcia”.
+ */
 export interface ReceiptFilter {
-	status: 'OPEN' | 'DONE';
+	status: 'IN_PROGRESS' | 'DONE';
 	warehouseId?: string | null;
 	dockId?: string | null;
 	date?: string | null;
@@ -107,11 +111,12 @@ export interface ReceiptFilter {
 export function listReceipts(f: ReceiptFilter): Promise<ReceiptDTO[]> {
 	return query((db) =>
 		db.receipts
-			.filter((r) => (f.status === 'DONE' ? r.status === 'DONE' : r.status !== 'DONE'))
+			.filter((r) => r.status === 'DONE')
 			.filter((r) => !f.warehouseId || r.warehouseId === f.warehouseId)
 			.filter((r) => !f.dockId || r.dockId === f.dockId)
 			.filter((r) => !f.date || (r.closedAt ?? r.createdAt).startsWith(f.date))
 			.map((r) => receiptDTO(db, r))
+			.filter((r) => r.statusKey === (f.status === 'DONE' ? 'PZ_DONE' : 'PZ_TODO'))
 			.filter((r) => match(f.q, r.number, r.supplier.name, r.advice.number, r.advice.vehicle.plate, ...r.purchaseOrders.map((p) => p.number)))
 			.sort((a, b) => (b.closedAt ?? b.createdAt).localeCompare(a.closedAt ?? a.createdAt))
 	);

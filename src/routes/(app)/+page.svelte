@@ -12,7 +12,7 @@
 	let c = $derived(data.context.counts);
 
 	let tiles = $derived([
-		{ href: '/dostawy/do-przyjecia', label: 'Dostawy', icon: PackageOpen, count: c.deliveries, hint: c.receiptsOpen ? `${c.receiptsOpen} PZ w trakcie` : 'Awizacje na dziś' },
+		{ href: '/dostawy/do-przyjecia', label: 'Dostawy', icon: PackageOpen, count: c.deliveries, hint: c.receiptsInProgress ? `${c.receiptsInProgress} PZ w trakcie` : 'Awizacje na dziś' },
 		{ href: '/alokacja', label: 'Alokacja', icon: ArrowDownToLine, count: c.allocation, hint: 'Zlecenia MWS na półki' },
 		{ href: '/przesuniecia', label: 'Przesunięcia', icon: ArrowLeftRight, count: c.transfers, hint: 'MM do realizacji' },
 		{ href: '/kompletacja', label: 'Kompletacja', icon: ClipboardList, count: c.picking, hint: 'Zlecenia kompletacyjne' },

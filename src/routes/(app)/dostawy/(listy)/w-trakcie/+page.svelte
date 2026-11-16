@@ -23,6 +23,6 @@
 	{#each visible as r (r.id)}
 		<li><ReceiptCard {r} /></li>
 	{:else}
-		<li><Empty>Brak PZ w trakcie przyjmowania</Empty></li>
+		<li><Empty>Brak PZ w trakcie – wszystko rozłożone na magazynie</Empty></li>
 	{/each}
 </ul>
