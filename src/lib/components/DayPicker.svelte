@@ -1,5 +1,6 @@
 <script lang="ts">
 	import CalendarDays from '@lucide/svelte/icons/calendar-days';
+	import DatePickerSheet from './DatePickerSheet.svelte';
 	import { addDays, fmtDayLong, todayStr } from '$lib/format';
 
 	/** Wybór dnia: szybkie chipy (przesunięcia względem dziś) + kalendarz */
@@ -7,6 +8,7 @@
 
 	let days = $derived(offsets.map((o) => addDays(todayStr(), o)));
 	let custom = $derived(!days.includes(value));
+	let calendarOpen = $state(false);
 </script>
 
 <div class="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3">
@@ -15,8 +17,9 @@
 			{fmtDayLong(d)}
 		</button>
 	{/each}
-	<label class="relative flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-bold {custom ? 'border-task bg-task text-task-ink' : 'border-line-strong bg-surface text-ink-2'}">
+	<button type="button" class="flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-bold {custom ? 'border-task bg-task text-task-ink' : 'border-line-strong bg-surface text-ink-2'}" onclick={() => (calendarOpen = true)}>
 		<CalendarDays class="size-4" />{custom ? fmtDayLong(value) : 'Inny dzień'}
-		<input type="date" class="absolute inset-0 opacity-0" {value} onchange={(e) => e.currentTarget.value && onChange(e.currentTarget.value)} />
-	</label>
+	</button>
 </div>
+
+<DatePickerSheet bind:open={calendarOpen} {value} onPick={onChange} />

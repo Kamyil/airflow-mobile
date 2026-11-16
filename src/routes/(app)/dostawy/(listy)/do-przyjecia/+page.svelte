@@ -9,6 +9,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import Badge from '$lib/components/Badge.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
+	import DatePickerSheet from '$lib/components/DatePickerSheet.svelte';
 	import SearchBox from '$lib/components/SearchBox.svelte';
 	import ProductFlags from '$lib/components/ProductFlags.svelte';
 	import Empty from '$lib/components/Empty.svelte';
@@ -49,6 +50,7 @@
 	function pickDate(d: string) {
 		if (d) setParams({ data: d, dni: null });
 	}
+	let calendarOpen = $state(false);
 	let multiDay = $derived(f.offsets.length > 1);
 
 	// --- szczegóły awizacji ---
@@ -93,10 +95,9 @@
 				</button>
 			{/each}
 		</div>
-		<label class="relative flex shrink-0 items-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold {f.date ? 'border-task bg-task text-task-ink' : 'border-line-strong bg-surface text-ink-2'}">
+		<button type="button" aria-label="Wybierz datę" class="flex shrink-0 items-center gap-1.5 rounded-xl border-2 px-3 text-sm font-bold {f.date ? 'border-task bg-task text-task-ink' : 'border-line-strong bg-surface text-ink-2'}" onclick={() => (calendarOpen = true)}>
 			<CalendarDays class="size-4" />{f.date ? fmtDate(f.date).slice(0, 5) : 'Data'}
-			<input type="date" aria-label="Wybierz datę" class="absolute inset-0 opacity-0" value={f.date ?? ''} onchange={(e) => pickDate(e.currentTarget.value)} />
-		</label>
+		</button>
 	</div>
 	<div class="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3">
 		<WarehouseDockFilters refs={data.context.refs} />
@@ -143,6 +144,8 @@
 		<li><Empty>Brak awizacji dla wybranych filtrów</Empty></li>
 	{/each}
 </ul>
+
+<DatePickerSheet bind:open={calendarOpen} value={f.date} title="Dzień dostawy" onPick={pickDate} onClear={() => setParams({ data: null, dni: null })} />
 
 <Sheet bind:open={detailOpen} title={detail?.supplier.name ?? 'Awizacja'} description={detail ? `${detail.number} · ${fmtDayLong(detail.date)} ${detail.slotFrom}–${detail.slotTo}` : ''}>
 	{#if !detail}
