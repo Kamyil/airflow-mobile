@@ -53,13 +53,27 @@
 	// palety i paczki liczone osobno, zapisywane razem
 	let carriers = $state(untrack(() => ({ ...(r.carriers.received ?? { pallets: r.carriers.advised ?? 0, parcels: 0 }) })));
 	let carriersDirty = $derived(carriers.pallets !== r.carriers.received?.pallets || carriers.parcels !== r.carriers.received?.parcels);
+	// zapisane nośniki są tylko do odczytu; liczniki pokazujemy po „Edytuj” albo gdy jeszcze nic nie zapisano
+	let editingCarriers = $state(untrack(() => r.carriers.received === null));
+
+	function editCarriers() {
+		if (r.carriers.received) carriers = { ...r.carriers.received };
+		editingCarriers = true;
+	}
+
+	function cancelCarriers() {
+		if (r.carriers.received) carriers = { ...r.carriers.received };
+		editingCarriers = false;
+	}
 
 	async function saveCarriers() {
+		if (!carriersDirty) return void (editingCarriers = false);
 		busy = true;
 		try {
 			await setReceiptCarriers(r.id, carriers);
 			toast.ok(`Zapisano: ${fmtCarriers(carriers)}`);
 			await invalidateAll();
+			editingCarriers = false;
 		} catch (e) {
 			toast.error(e);
 		} finally {
@@ -148,6 +162,7 @@
 			try {
 				await setReceiptCarriers(r.id, carriers);
 				await invalidateAll();
+				editingCarriers = false;
 			} catch (e) {
 				toast.error(e);
 				return;
@@ -245,23 +260,36 @@
 				<p class="flex items-center gap-2 text-sm font-bold"><Layers class="size-4 text-muted" />Przyjęte nośniki</p>
 				<span class="text-xs text-muted">{r.carriers.advised !== null ? `awizowano: ${r.carriers.advised} ${plural(r.carriers.advised, 'paleta', 'palety', 'palet')}` : 'awizacja bez liczby palet'}</span>
 			</div>
-			<div class="mt-3 flex flex-col gap-2">
-				<div class="flex items-center gap-3">
-					<span class="w-16 shrink-0 text-sm font-bold">Palety</span>
-					<QtyStepper bind:value={carriers.pallets} min={0} max={999} size="lg" class="flex-1" />
+			{#if editingCarriers || !r.carriers.received}
+				<div class="mt-3 flex flex-col gap-2">
+					<div class="flex items-center gap-3">
+						<span class="w-16 shrink-0 text-sm font-bold">Palety</span>
+						<QtyStepper bind:value={carriers.pallets} min={0} max={999} size="lg" class="flex-1" />
+					</div>
+					<div class="flex items-center gap-3">
+						<span class="w-16 shrink-0 text-sm font-bold">Paczki</span>
+						<QtyStepper bind:value={carriers.parcels} min={0} max={999} size="lg" class="flex-1" />
+					</div>
+					<div class="flex gap-2">
+						{#if r.carriers.received}<Button size="lg" class="flex-1" disabled={busy} onclick={cancelCarriers}>Anuluj</Button>{/if}
+						<Button variant="primary" size="lg" class="flex-[2]" loading={busy} onclick={saveCarriers}>Zapisz – {fmtCarriers(carriers)}</Button>
+					</div>
 				</div>
-				<div class="flex items-center gap-3">
-					<span class="w-16 shrink-0 text-sm font-bold">Paczki</span>
-					<QtyStepper bind:value={carriers.parcels} min={0} max={999} size="lg" class="flex-1" />
+				{#if !r.carriers.received}<p class="mt-2 text-xs text-muted">Policz palety i paczki zdjęte z auta i zapisz.</p>{/if}
+			{:else}
+				<!-- zapisane: tylko do odczytu -->
+				<div class="mt-3 flex items-center gap-3">
+					<dl class="grid flex-1 grid-cols-2 gap-2">
+						<div class="rounded-xl bg-bg px-3 py-2"><dt class="text-xs text-muted">Palety</dt><dd class="font-mono text-2xl font-extrabold">{r.carriers.received.pallets}</dd></div>
+						<div class="rounded-xl bg-bg px-3 py-2"><dt class="text-xs text-muted">Paczki</dt><dd class="font-mono text-2xl font-extrabold">{r.carriers.received.parcels}</dd></div>
+					</dl>
+					<Button size="lg" class="h-16" onclick={editCarriers}><Pencil class="size-4" />Edytuj</Button>
 				</div>
-				<Button variant="primary" size="lg" class="w-full" disabled={!carriersDirty} loading={busy} onclick={saveCarriers}>Zapisz{carriersDirty ? ` – ${fmtCarriers(carriers)}` : ''}</Button>
-			</div>
-			{#if r.carriers.received === null}
-				<p class="mt-2 text-xs text-muted">Policz palety i paczki zdjęte z auta i zapisz.</p>
-			{:else if r.carriers.diff}
-				<p class="mt-2 flex gap-2 rounded-xl bg-warn-soft p-2.5 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica palet {fmtDiff(r.carriers.diff)} względem awizacji – zakończenie wymaga potwierdzenia przełożonego.</p>
-			{:else if !carriersDirty}
-				<p class="mt-2 flex items-center gap-1.5 text-xs font-bold text-ok"><Check class="size-4" />Zapisano{r.carriers.advised !== null ? ' – zgodne z awizacją' : ''}</p>
+				{#if r.carriers.diff}
+					<p class="mt-2 flex gap-2 rounded-xl bg-warn-soft p-2.5 text-sm font-semibold text-warn"><TriangleAlert class="size-5 shrink-0" />Różnica palet {fmtDiff(r.carriers.diff)} względem awizacji – zakończenie wymaga potwierdzenia przełożonego.</p>
+				{:else}
+					<p class="mt-2 flex items-center gap-1.5 text-xs font-bold text-ok"><Check class="size-4" />Zapisano{r.carriers.advised !== null ? ' – zgodne z awizacją' : ''}</p>
+				{/if}
 			{/if}
 		</section>
 	{/if}
