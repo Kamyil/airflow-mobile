@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
-	import { beforeNavigate } from '$app/navigation';
-	import { navigating, updated } from '$app/state';
+	import { afterNavigate, beforeNavigate } from '$app/navigation';
+	import { navigating, page, updated } from '$app/state';
 	import Toaster from '$lib/components/Toaster.svelte';
 
 	let { children } = $props();
@@ -12,6 +12,18 @@
 		if (updated.current && !willUnload && to?.url) {
 			cancel();
 			location.href = to.url.href;
+		}
+	});
+
+	// Statystyki wejść na ekrany – tylko dla konta śledzonego (decyzję podejmuje serwer, patrz auth.ts).
+	// Wysyłamy route id (np. /(app)/dostawy/pz/[id]), żeby grupować ekrany, a nie konkretne dokumenty.
+	afterNavigate(({ to }) => {
+		let screen = to?.route.id;
+		if (!page.data.track || !screen) return;
+		try {
+			navigator.sendBeacon('/api/track', screen);
+		} catch {
+			// brak sieci / sendBeacon – statystyka przepada, aplikacja działa dalej
 		}
 	});
 </script>

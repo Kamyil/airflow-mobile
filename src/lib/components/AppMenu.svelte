@@ -15,6 +15,7 @@
 	import Wifi from '@lucide/svelte/icons/wifi';
 	import WifiOff from '@lucide/svelte/icons/wifi-off';
 	import Send from '@lucide/svelte/icons/send';
+	import ChartColumn from '@lucide/svelte/icons/chart-column';
 
 	let open = $state(false);
 	let busy = $state(false);
@@ -83,6 +84,9 @@
 		<Button onclick={toggleOffline}>
 			{#if connectivity.simulatedOffline}<Wifi class="size-4" />Przywróć połączenie{:else}<WifiOff class="size-4" />Symuluj brak sieci{/if}
 		</Button>
+		{#if page.data.statsViewer}
+			<Button href="/statystyki"><ChartColumn class="size-4" />Statystyki konta testowego</Button>
+		{/if}
 		<Button variant="danger" loading={busy} onclick={reset}><RotateCcw class="size-4" />Resetuj dane do stanu początkowego</Button>
 	</div>
 </Sheet>

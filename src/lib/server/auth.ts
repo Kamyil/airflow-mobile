@@ -6,10 +6,25 @@ import { env } from '$env/dynamic/private';
  * ($lib/server nie trafia do bundla przeglądarki). Sesja to podpisane HMAC ciasteczko,
  * więc nie da się jej podrobić w przeglądarce.
  */
-const ACCOUNTS = [
-	{ login: 'magazyn', password: 'mws2026', name: 'TC52 #07' },
+type Account = {
+	login: string;
+	password: string;
+	name: string;
+	/** liczymy logowania i wejścia na ekrany (konto podawane na ekranie logowania) */
+	tracked?: boolean;
+	/** widzi /statystyki (nasze konto wewnętrzne – nigdzie niepodpowiadane) */
+	statsViewer?: boolean;
+};
+
+const ACCOUNTS: Account[] = [
+	{ login: 'magazyn', password: 'mws2026', name: 'TC52 #07', statsViewer: true },
+	{ login: 'test', password: 'test2026', name: 'Konto testowe', tracked: true },
 	{ login: 'demo', password: 'demo2026', name: 'Konto demo' }
 ];
+
+const account = (login: string | undefined) => ACCOUNTS.find((a) => a.login === login);
+export const isTracked = (user: SessionUser | null) => !!account(user?.login)?.tracked;
+export const isStatsViewer = (user: SessionUser | null) => !!account(user?.login)?.statsViewer;
 
 export const SESSION_COOKIE = 'mws_session';
 export const SESSION_MAX_AGE = 12 * 60 * 60;

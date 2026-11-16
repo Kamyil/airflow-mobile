@@ -49,7 +49,7 @@
 			<p class="mt-3 flex items-center gap-2 rounded-xl bg-bad-soft p-3 text-sm font-semibold text-bad"><TriangleAlert class="size-4 shrink-0" />{form.error}</p>
 		{/if}
 		<Button type="submit" variant="primary" size="lg" class="mt-5 w-full" loading={busy}>Zaloguj się</Button>
-		<p class="mt-3 text-center text-xs text-muted">Makieta: <b class="font-mono">magazyn</b> / <b class="font-mono">mws2026</b></p>
+		<p class="mt-3 text-center text-xs text-muted">Makieta: <b class="font-mono">test</b> / <b class="font-mono">test2026</b></p>
 		<a href="/install" class="mt-2 mb-6 block text-center text-sm font-bold text-info underline underline-offset-2">Jak zainstalować aplikację na telefonie?</a>
 	</form>
 </main>

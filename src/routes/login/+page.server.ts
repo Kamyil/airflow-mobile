@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { authenticate, createSession, SESSION_COOKIE, SESSION_MAX_AGE } from '$lib/server/auth';
+import { authenticate, createSession, isTracked, SESSION_COOKIE, SESSION_MAX_AGE } from '$lib/server/auth';
+import { trackLogin } from '$lib/server/stats';
 import type { Actions } from './$types';
 
 export const actions: Actions = {
@@ -10,6 +11,8 @@ export const actions: Actions = {
 		let user = authenticate(login, String(form.get('password') ?? ''));
 
 		if (!user) return fail(400, { login, error: 'Nieprawidłowy login lub hasło.' });
+
+		if (isTracked(user)) await trackLogin(request.headers.get('user-agent'));
 
 		cookies.set(SESSION_COOKIE, createSession(user), {
 			path: '/',
